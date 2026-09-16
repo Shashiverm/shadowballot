@@ -1,0 +1,34 @@
+name: ShadowBallot CI Quality Gate
+
+on:
+  push:
+    branches: [ Main, main ]
+  pull_request:
+    branches: [ Main, main ]
+
+jobs:
+  validate:
+    name: Build, Compile Compact & Verify 10/10 Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Project Dependencies
+        run: npm ci
+
+      - name: TypeScript Strict Typecheck
+        run: npm run typecheck
+
+      - name: Run ShadowBallot Zero-Knowledge Test Suite (10/10)
+        run: npm test
+
+      - name: Compile Production Frontend Distribution Bundle
+        run: npm run build
