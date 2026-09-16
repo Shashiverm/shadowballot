@@ -64,7 +64,7 @@ export async function connectMidnightWallet(preferDevOrMobile = false): Promise<
         const api = await lace.enable();
         const accounts = await api.getUnshieldedAddresses();
         const address = accounts[0] || '020088b901a1827cf482a1782e4f019a82001';
-        
+
         return {
           isConnected: true,
           isConnecting: false,
