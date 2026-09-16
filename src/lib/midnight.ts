@@ -1,8 +1,8 @@
 import { Election } from './types';
 
 export const MIDNIGHT_CONFIG = {
-  contractAddress: '02009c8b7f14e3d65a8820c741e2b5894f09d84e1b8c63479ae7a52cd48911f93e2a',
-  deploymentTx: '0x3f98a21d4c728e10b4f8812c3e4599a0b1297e6840d2811a7e4e1a0b3f5c7198',
+  contractAddress: '02005a7cf9b301824e9da17849e0813f019b84a27c0892015df38902cae148b2',
+  deploymentTx: '0x9f81a7b3c40192e8d47b1029c384e9021a8f902738b5c901e7492c10b489a317',
   network: 'Midnight Preprod',
   networkId: 'preprod',
   explorerUrl: 'https://explorer.preprod.midnight.network',

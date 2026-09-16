@@ -97,7 +97,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="nav-right">
           <div className="network-badge desktop-only">
             <span className="pulse-dot" />
-            <span>Preprod</span>
+            <span>{wallet.network.toUpperCase()}</span>
           </div>
 
           <button
@@ -186,7 +186,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Network</span>
             <span className="network-badge" style={{ fontSize: '0.72rem' }}>
               <span className="pulse-dot" />
-              Midnight Preprod
+              Midnight {wallet.network.toUpperCase()}
             </span>
           </div>
         </div>

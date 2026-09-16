@@ -119,6 +119,31 @@ export circuit cast_private_vote(disclosedNullifier: Bytes<32>, optionChoice: Ui
           </div>
         </div>
 
+        {/* Auditor Verification Protocol Card */}
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: '16px',
+          padding: '20px',
+          marginBottom: '24px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+          gap: '16px'
+        }}>
+          <div style={{ borderLeft: '3px solid #8B5CF6', paddingLeft: '12px' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--violet-light)', textTransform: 'uppercase' }}>Auditor Task 1: ZK Circuit Bytecode</div>
+            <div style={{ fontSize: '0.82rem', color: '#ffffff', marginTop: '4px' }}>Verify PLONK circuit constraints (cast_private_vote.zkir, 13.4 KB) ensuring off-chain witness secrecy.</div>
+          </div>
+          <div style={{ borderLeft: '3px solid #38BDF8', paddingLeft: '12px' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase' }}>Auditor Task 2: Nullifier Tree Integrity</div>
+            <div style={{ fontSize: '0.82rem', color: '#ffffff', marginTop: '4px' }}>Confirm each vote nullifier is strictly unique: N = H(secret, electionId), preventing replay attacks.</div>
+          </div>
+          <div style={{ borderLeft: '3px solid #34D399', paddingLeft: '12px' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#34d399', textTransform: 'uppercase' }}>Auditor Task 3: Consensus State Verification</div>
+            <div style={{ fontSize: '0.82rem', color: '#ffffff', marginTop: '4px' }}>Cross-reference ledger state against Midnight Preprod block height and transaction receipts.</div>
+          </div>
+        </div>
+
         {/* Compact Code Block */}
         <div style={{
           background: '#040507',

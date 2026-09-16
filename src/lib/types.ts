@@ -1,4 +1,4 @@
-export type MidnightNetwork = 'preprod' | 'preview';
+export type MidnightNetwork = 'preprod' | 'testnet' | 'preview' | 'devnet' | 'undeployed';
 
 export interface BallotOption {
   id: number;

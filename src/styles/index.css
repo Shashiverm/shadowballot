@@ -835,17 +835,86 @@ button {
   color: #9ca3af;
 }
 
-/* Footer */
-.footer {
-  border-top: 1px solid var(--border-subtle);
-  padding: 32px 0 24px;
-  margin-top: 60px;
-  background: rgba(7, 8, 11, 0.95);
-  color: var(--text-muted);
-  font-size: 0.82rem;
+/* Role Navigation Bar */
+.role-bar-container {
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(14, 18, 29, 0.6);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 72px;
+  z-index: 40;
+  padding: 8px 0;
 }
 
-.footer-inner {
+.role-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 4px 0;
+}
+
+.role-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.role-label-txt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-right: 8px;
+  white-space: nowrap;
+}
+
+.role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.role-pill:hover {
+  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: var(--text-main);
+}
+
+.role-pill.active {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.25) 0%, rgba(56, 189, 248, 0.15) 100%);
+  border-color: var(--violet-light);
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(124, 58, 237, 0.3);
+}
+
+.role-duty-badge {
+  font-size: 0.68rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--violet-light);
+}
+
+/* Page Role Banner */
+.page-role-header {
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.06) 0%, transparent 100%);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 24px 0 20px;
+  margin-bottom: 32px;
+}
+
+.page-role-header-inner {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -853,12 +922,210 @@ button {
   gap: 16px;
 }
 
-.footer-links {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
+.role-tag-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(124, 58, 237, 0.12);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--violet-light);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
 }
 
-.footer-link:hover {
-  color: var(--text-main);
+.page-role-title {
+  font-size: clamp(1.4rem, 2.5vw, 1.85rem);
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 6px;
+}
+
+.page-role-desc {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  max-width: 680px;
+  line-height: 1.5;
+}
+
+/* Enhanced Responsive Footer */
+.footer-enhanced {
+  border-top: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, #07080B 0%, #030406 100%);
+  padding: 56px 0 28px;
+  margin-top: 80px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.footer-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding-bottom: 36px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 40px;
+}
+
+.footer-brand {
+  max-width: 460px;
+}
+
+.footer-brand-title {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+}
+
+.footer-brand-tag {
+  font-size: 0.72rem;
+  color: var(--violet-light);
+  margin-left: 8px;
+  padding: 2px 6px;
+  background: rgba(139, 92, 246, 0.12);
+  border-radius: 4px;
+}
+
+.footer-mission {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-top: 10px;
+}
+
+.footer-status-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 14px 18px;
+  min-width: 260px;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  margin-bottom: 8px;
+}
+
+.contract-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.contract-tag code {
+  font-family: var(--font-mono);
+  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* 4-Column Responsive Layout */
+.footer-columns {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  padding-bottom: 40px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.footer-col-title {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+  margin-bottom: 16px;
+}
+
+.footer-col-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.footer-col-link {
+  color: var(--text-muted);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  font-size: 0.82rem;
+}
+
+.footer-col-link:hover {
+  color: var(--violet-light);
+  transform: translateX(3px);
+}
+
+.footer-text-item {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.footer-text-item strong {
+  color: #cbd5e1;
+}
+
+/* Footer Bottom */
+.footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-top: 24px;
+  font-size: 0.78rem;
+}
+
+.footer-bottom-privacy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  max-width: 650px;
+  line-height: 1.4;
+}
+
+.footer-bottom-copy {
+  color: var(--text-dim);
+}
+
+@media (max-width: 900px) {
+  .footer-columns {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px;
+  }
+}
+
+@media (max-width: 580px) {
+  .footer-columns {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .footer-top {
+    flex-direction: column;
+  }
+  .footer-status-card {
+    width: 100%;
+  }
 }
