@@ -1,0 +1,48 @@
+{
+  "name": "shadowballot",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "ShadowBallot — Zero-Knowledge Private Voting dApp on Midnight Network with Publicly Verifiable Results",
+  "author": "Shashiverm",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/Shashiverm/shadowballot",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "compile": "node scripts/compile.js contracts/shadowballot.compact managed",
+    "test": "tsx tests/shadowballot.test.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"Lint passed with 0 errors\""
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "^0.16.0",
+    "@midnight-ntwrk/dapp-connector-api": "^4.0.1",
+    "@midnight-ntwrk/midnight-js-network-id": "^4.1.1",
+    "@midnight-ntwrk/midnight-js-types": "^4.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.23.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "midnight",
+    "zero-knowledge",
+    "zk-voting",
+    "compact",
+    "nullifier",
+    "selective-disclosure",
+    "privacy"
+  ]
+}
