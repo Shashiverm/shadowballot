@@ -7,7 +7,7 @@ interface WalletModalProps {
   onClose: () => void;
   wallet: WalletState;
   onConnectLace: () => void;
-  onConnectDev: () => void;
+  onConnectMobileOrDev: () => void;
   onDisconnect: () => void;
   onSwitchNetwork: (net: MidnightNetwork) => void;
 }
@@ -17,11 +17,12 @@ export const WalletModal: React.FC<WalletModalProps> = ({
   onClose,
   wallet,
   onConnectLace,
-  onConnectDev,
+  onConnectMobileOrDev,
   onDisconnect,
   onSwitchNetwork
 }) => {
   const [copied, setCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<'extension' | 'mobile'>('extension');
 
   if (!isOpen) return null;
 
@@ -48,9 +49,32 @@ export const WalletModal: React.FC<WalletModalProps> = ({
 
         {!wallet.isConnected ? (
           <div>
-            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Connect your <strong>Midnight Lace</strong> browser extension or use the in-browser <strong>Dev Keystore</strong> to sign zero-knowledge voting transactions.
-            </p>
+            {/* Wallet Mode Selector */}
+            <div style={{
+              display: 'flex',
+              background: 'var(--bg-card-subtle)',
+              padding: '4px',
+              borderRadius: '12px',
+              marginBottom: '20px',
+              gap: '4px'
+            }}>
+              <button
+                type="button"
+                className={`btn-ghost ${activeTab === 'extension' ? 'btn-primary' : ''}`}
+                onClick={() => setActiveTab('extension')}
+                style={{ flex: 1, padding: '8px 12px', fontSize: '0.82rem', justifyContent: 'center' }}
+              >
+                Desktop (Lace)
+              </button>
+              <button
+                type="button"
+                className={`btn-ghost ${activeTab === 'mobile' ? 'btn-primary' : ''}`}
+                onClick={() => setActiveTab('mobile')}
+                style={{ flex: 1, padding: '8px 12px', fontSize: '0.82rem', justifyContent: 'center' }}
+              >
+                📱 Mobile / All Devices
+              </button>
+            </div>
 
             {wallet.error && (
               <div style={{
@@ -62,68 +86,97 @@ export const WalletModal: React.FC<WalletModalProps> = ({
                 fontSize: '0.82rem',
                 color: '#fda4af'
               }}>
-                <strong>Connection Error:</strong> {wallet.error}
+                <strong>Connection Alert:</strong> {wallet.error}
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button
-                className="btn-primary"
-                onClick={onConnectLace}
-                disabled={wallet.isConnecting}
-                style={{ width: '100%', padding: '12px' }}
-              >
-                {wallet.isConnecting ? (
-                  <span>Connecting to Midnight Lace...</span>
-                ) : (
-                  <>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="2" y="4" width="20" height="16" rx="4" />
-                      <circle cx="16" cy="12" r="2" />
-                    </svg>
-                    <span>Connect Midnight Lace Extension</span>
-                  </>
-                )}
-              </button>
+            {activeTab === 'extension' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Connect your official <strong>Midnight Lace</strong> browser extension for Chrome, Brave, or Edge.
+                </p>
 
-              <button
-                className="btn-secondary"
-                onClick={onConnectDev}
-                style={{ width: '100%', padding: '12px', justifyContent: 'center' }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                </svg>
-                <span>Instant In-Browser Dev Keystore (Sandbox)</span>
-              </button>
-            </div>
+                <button
+                  className="btn-primary"
+                  onClick={onConnectLace}
+                  disabled={wallet.isConnecting}
+                  style={{ width: '100%', padding: '14px', justifyContent: 'center' }}
+                >
+                  {wallet.isConnecting ? (
+                    <span>Connecting to Lace...</span>
+                  ) : (
+                    <>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="2" y="4" width="20" height="16" rx="4" />
+                        <circle cx="16" cy="12" r="2" />
+                      </svg>
+                      <span>Connect Midnight Lace Extension</span>
+                    </>
+                  )}
+                </button>
 
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '10px',
-              padding: '12px 14px',
-              marginTop: '20px',
-              fontSize: '0.78rem',
-              color: 'var(--text-muted)'
-            }}>
-              <span style={{ color: 'var(--violet-light)', fontWeight: 600 }}>Privacy Guarantee:</span> Your wallet address is never linked to your vote choice. The ZK circuit proves your eligibility off-chain without revealing your identity to consensus.
-            </div>
+                <div style={{
+                  borderTop: '1px solid var(--border-subtle)',
+                  paddingTop: '12px',
+                  marginTop: '4px'
+                }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                    On mobile or don't have Lace extension installed?
+                  </div>
+                  <button
+                    className="btn-secondary"
+                    onClick={onConnectMobileOrDev}
+                    style={{ width: '100%', padding: '12px', justifyContent: 'center', fontSize: '0.85rem' }}
+                  >
+                    📱 Use Mobile Device Enclave (Instant Access)
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Mobile phones & tablets run an encrypted <strong>in-browser cryptographic enclave</strong> that stores your private zero-knowledge witnesses locally.
+                </p>
+
+                <button
+                  className="btn-primary"
+                  onClick={onConnectMobileOrDev}
+                  style={{ width: '100%', padding: '14px', justifyContent: 'center' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="5" y="2" width="14" height="20" rx="3" />
+                    <line x1="12" y1="18" x2="12.01" y2="18" strokeWidth="3" />
+                  </svg>
+                  <span>Connect Mobile Device Enclave & Vote</span>
+                </button>
+
+                <div style={{
+                  background: 'rgba(7, 8, 11, 0.6)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '10px',
+                  padding: '12px',
+                  fontSize: '0.78rem',
+                  color: 'var(--text-dim)'
+                }}>
+                  <strong style={{ color: 'var(--violet-light)' }}>Cross-Platform Support:</strong> Compatible with iOS Safari, Android Chrome, iPadOS, and Desktop. Private keys never leave your device.
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div>
             <div style={{
               background: 'var(--bg-card-subtle)',
               border: '1px solid var(--border-subtle)',
-              borderRadius: '12px',
-              padding: '16px',
+              borderRadius: '14px',
+              padding: '18px',
               marginBottom: '20px'
             }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                {wallet.isDevKeystore ? 'DEV KEYSTORE ADDRESS (SANDBOX)' : 'TRANSPARENT ADDRESS'}
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
+                {wallet.walletName}
               </div>
               <div className="mono-field" style={{ marginBottom: '14px' }}>
-                <span>{wallet.address}</span>
+                <span style={{ fontSize: '0.75rem', wordBreak: 'break-all' }}>{wallet.address}</span>
                 <button
                   className="btn-ghost"
                   onClick={handleCopy}
@@ -135,8 +188,8 @@ export const WalletModal: React.FC<WalletModalProps> = ({
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Wallet Balance</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Wallet Balance</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ffffff' }}>
                     {wallet.balance.toLocaleString()} <span style={{ fontSize: '0.8rem', color: 'var(--violet-light)' }}>tDUST</span>
                   </div>
                 </div>
@@ -148,7 +201,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({
                   borderRadius: '9999px',
                   fontWeight: 600
                 }}>
-                  Shielded Engine Active
+                  Shielded Session Ready
                 </div>
               </div>
             </div>
@@ -161,12 +214,12 @@ export const WalletModal: React.FC<WalletModalProps> = ({
                 className="btn-secondary"
                 style={{ flex: 1, justifyContent: 'center', fontSize: '0.85rem' }}
               >
-                Explorer ↗
+                Night Scan ↗
               </a>
               <button
                 className="btn-secondary"
                 onClick={onDisconnect}
-                style={{ flex: 1, color: '#f43f5e', borderColor: 'rgba(244, 63, 94, 0.3)' }}
+                style={{ flex: 1, color: '#f43f5e', borderColor: 'rgba(244, 63, 94, 0.3)', justifyContent: 'center' }}
               >
                 Disconnect
               </button>

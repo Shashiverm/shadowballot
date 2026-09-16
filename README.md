@@ -76,6 +76,13 @@ The complete contract verification suite testing election creation, valid voting
 
 ---
 
+### 8. Cross-Device Responsive Mobile Interface
+Fully responsive across iOS Safari, Android, tablets, and desktop devices with adaptive navigation and mobile enclave support.
+
+![Mobile Responsive](docs/screenshots/08_mobile_responsive.png)
+
+---
+
 ## Architecture & Privacy Model
 
 ```
@@ -135,20 +142,24 @@ The complete contract verification suite testing election creation, valid voting
 
 ## Core Features
 
-1. **Private Voter Eligibility Verification**
-   - Voters prove their credentials satisfy eligibility criteria without publishing identity or credential data.
-2. **Encrypted Choice Isolation**
-   - The blockchain never receives raw vote selections. Ballot choices remain shielded in client memory while proving membership in `[0, 1, 2, 3]`.
-3. **Deterministic Nullifier Replay Defense**
+1. **Strict Cryptographic Security Gating**:
+   - Only public tallies and the contract inspector are accessible without a wallet.
+   - Voting, selective disclosure proofs, and election creation are strictly gated behind wallet authentication.
+   - Immediate voting: as soon as a voter connects their wallet or mobile enclave, they are immediately placed into the confidential ballot.
+2. **Multi-Device & Mobile Enclave Connectivity**:
+   - Native integration with **Midnight Lace** browser extension on desktop browsers.
+   - Dedicated in-browser cryptographic enclave for mobile devices (iOS Safari, Android Chrome) ensuring private keys and shielded witnesses never leave the device.
+3. **Private Voter Eligibility & Choice Isolation**:
+   - The blockchain never receives raw vote selections or voter credentials. Ballot choices remain shielded in client witness memory.
+4. **Deterministic Nullifiers (Double-Vote Replay Defense)**:
    - Derives a unique nullifier: `nullifier = H(voterSecret + electionId)`.
    - Prevents double-voting while preserving voter anonymity.
-4. **Selective Disclosure: Proof of Participation**
+5. **Selective Disclosure: Proof of Participation**:
    - Generates an independent cryptographic token proving participation in an election without disclosing *who* voted or *how* they voted.
-5. **Real-Time Verifiable Tally & On-Chain Audit**
+6. **Publicly Verifiable Real-Time Results & Consensus Audit**:
    - Aggregates public tallies with cryptographic consensus verification and ledger state checks.
-6. **Dual Wallet Support**
-   - Native integration with **Midnight Lace** browser extension (`window.midnight.mnLace`) alongside an instantaneous in-browser **Dev Keystore** for seamless evaluation.
-7. **Organizer Dashboard**
+7. **Organizer Dashboard & Multipage Routing**:
+   - Hash-based deep link routing (`#/vote`, `#/results`, `#/proof`, `#/organizer`, `#/contract`).
    - Create custom multi-option elections, define voting windows, and seal ballot boxes.
 
 ---

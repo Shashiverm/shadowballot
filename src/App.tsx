@@ -6,18 +6,31 @@ import { ParticipationProof } from './components/ParticipationProof';
 import { OrganizerDashboard } from './components/OrganizerDashboard';
 import { ContractInspector } from './components/ContractInspector';
 import { WalletModal } from './components/WalletModal';
+import { WalletGate } from './components/WalletGate';
 import { Footer } from './components/Footer';
 import { Election, WalletState, VoterCredential, VoteReceipt, MidnightNetwork } from './lib/types';
 import { INITIAL_ELECTIONS } from './lib/midnight';
 import { getOrCreateVoterCredential } from './lib/crypto';
+import { connectMidnightWallet } from './lib/wallet';
+
+type PageTab = 'vote' | 'results' | 'proof' | 'organizer' | 'contract';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'vote' | 'results' | 'proof' | 'organizer' | 'contract'>('vote');
+  // Hash-based multipage routing
+  const getTabFromHash = (): PageTab => {
+    const hash = window.location.hash.replace('#/', '').replace('#', '').toLowerCase();
+    if (hash === 'results' || hash === 'proof' || hash === 'organizer' || hash === 'contract') {
+      return hash;
+    }
+    return 'vote';
+  };
+
+  const [activeTab, setActiveTabState] = useState<PageTab>(getTabFromHash);
   const [elections, setElections] = useState<Election[]>(INITIAL_ELECTIONS);
   const [selectedElectionId, setSelectedElectionId] = useState<number>(1);
   const [spentNullifiers, setSpentNullifiers] = useState<Set<string>>(new Set());
   const [walletModalOpen, setWalletModalOpen] = useState<boolean>(false);
-  const [voterCred, setVoterCred] = useState<VoterCredential>(getOrCreateVoterCredential());
+  const [voterCred] = useState<VoterCredential>(getOrCreateVoterCredential());
 
   const [wallet, setWallet] = useState<WalletState>({
     isConnected: false,
@@ -31,7 +44,22 @@ export const App: React.FC = () => {
     error: null
   });
 
-  // Check for Midnight Lace extension in window
+  const setActiveTab = (tab: PageTab) => {
+    setActiveTabState(tab);
+    window.location.hash = `#/${tab}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Listen to browser forward/back buttons
+  useEffect(() => {
+    const handleHashChange = () => {
+      setActiveTabState(getTabFromHash());
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Detect Midnight Lace extension in window
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).midnight?.mnLace) {
       setWallet((prev) => ({ ...prev, isInstalled: true }));
@@ -40,52 +68,32 @@ export const App: React.FC = () => {
 
   const handleConnectLace = async () => {
     setWallet((prev) => ({ ...prev, isConnecting: true, error: null }));
-
     try {
-      const mn = (window as any).midnight;
-      if (mn && mn.mnLace) {
-        const lace = mn.mnLace;
-        const api = await lace.enable();
-        const accounts = await api.getUnshieldedAddresses();
-        const address = accounts[0] || '020088b901a1827cf482a1782e4f019a82001';
-        setWallet({
-          isConnected: true,
-          isConnecting: false,
-          isInstalled: true,
-          address,
-          balance: 2450,
-          network: 'preprod',
-          walletName: 'Midnight Lace Extension',
-          isDevKeystore: false,
-          error: null
-        });
-        setWalletModalOpen(false);
-      } else {
-        // Fallback to Dev Keystore if extension is not installed
-        handleConnectDev();
-      }
+      const connectedState = await connectMidnightWallet(false);
+      setWallet(connectedState);
+      setWalletModalOpen(false);
     } catch (err: any) {
       setWallet((prev) => ({
         ...prev,
         isConnecting: false,
-        error: err?.message || 'Failed to connect Midnight Lace. Try the Dev Keystore.'
+        error: err?.message || 'Failed to connect Midnight Lace. Try the Mobile/Dev Enclave.'
       }));
     }
   };
 
-  const handleConnectDev = () => {
-    setWallet({
-      isConnected: true,
-      isConnecting: false,
-      isInstalled: true,
-      address: '0200fa4e87a27d2c3882a939f3714b3d8819445eeea8910b8cf9ffca14d59a202a0b',
-      balance: 15000,
-      network: 'preprod',
-      walletName: 'Midnight Dev Keystore',
-      isDevKeystore: true,
-      error: null
-    });
-    setWalletModalOpen(false);
+  const handleConnectMobileOrDev = async () => {
+    setWallet((prev) => ({ ...prev, isConnecting: true, error: null }));
+    try {
+      const connectedState = await connectMidnightWallet(true);
+      setWallet(connectedState);
+      setWalletModalOpen(false);
+    } catch (err: any) {
+      setWallet((prev) => ({
+        ...prev,
+        isConnecting: false,
+        error: err?.message || 'Failed to initialize device enclave.'
+      }));
+    }
   };
 
   const handleDisconnect = () => {
@@ -107,7 +115,6 @@ export const App: React.FC = () => {
     setWallet((prev) => ({ ...prev, network }));
   };
 
-  // When a vote is successfully cast
   const handleVoteSuccess = (electionId: number, optionId: number, receipt: VoteReceipt) => {
     setSpentNullifiers((prev) => {
       const next = new Set(prev);
@@ -163,7 +170,7 @@ export const App: React.FC = () => {
         onSwitchNetwork={handleSwitchNetwork}
       />
 
-      {/* Hero Section */}
+      {/* Hero Header Section */}
       <header className="hero">
         <div className="container">
           <div className="hero-pill">
@@ -178,25 +185,32 @@ export const App: React.FC = () => {
             Private choices. Public truth. Your vote is yours. The result belongs to everyone.
           </p>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
             <button
               className={`btn-primary ${activeTab === 'vote' ? 'active' : ''}`}
               onClick={() => setActiveTab('vote')}
-              style={{ padding: '12px 28px', fontSize: '1rem' }}
+              style={{ padding: '12px 24px', fontSize: '0.95rem' }}
             >
-              <span>🗳️ Enter Active Election</span>
+              <span>🗳️ Enter Active Ballot</span>
+            </button>
+            <button
+              className={`btn-secondary ${activeTab === 'results' ? 'btn-primary' : ''}`}
+              onClick={() => setActiveTab('results')}
+              style={{ padding: '12px 20px', fontSize: '0.95rem' }}
+            >
+              <span>📊 Public Results (Open)</span>
             </button>
             <button
               className="btn-secondary"
               onClick={() => setActiveTab('organizer')}
-              style={{ padding: '12px 24px' }}
+              style={{ padding: '12px 20px', fontSize: '0.95rem' }}
             >
               <span>🏛️ Create Proposal</span>
             </button>
             <button
               className="btn-secondary"
               onClick={() => setActiveTab('proof')}
-              style={{ padding: '12px 24px' }}
+              style={{ padding: '12px 20px', fontSize: '0.95rem' }}
             >
               <span>🛡️ Verify Participation</span>
             </button>
@@ -207,7 +221,7 @@ export const App: React.FC = () => {
             <div className="stat-card">
               <div className="stat-label">Active Elections</div>
               <div className="stat-value">{elections.length}</div>
-              <div className="stat-detail">✓ 100% On-Chain Quorum Active</div>
+              <div className="stat-detail">✓ 100% On-Chain Consensus</div>
             </div>
             <div className="stat-card">
               <div className="stat-label">Total Ballots Cast</div>
@@ -217,7 +231,7 @@ export const App: React.FC = () => {
             <div className="stat-card">
               <div className="stat-label">ZK Prover Engine</div>
               <div className="stat-value">Halo2 / PLONK</div>
-              <div className="stat-detail">✓ ~1.2s Local Proving Time</div>
+              <div className="stat-detail">✓ ~1.2s Local Prover Time</div>
             </div>
             <div className="stat-card">
               <div className="stat-label">Nullifier Replay Shield</div>
@@ -281,22 +295,33 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Tab View */}
+      {/* Main Pages with Security Gating */}
       <main>
+        {/* Tab 1: Cast Vote — Strictly Gated behind Wallet */}
         {activeTab === 'vote' && (
-          <VotingPanel
-            elections={elections}
-            selectedElectionId={selectedElectionId}
-            onSelectElection={setSelectedElectionId}
-            wallet={wallet}
-            voterCred={voterCred}
-            spentNullifiers={spentNullifiers}
-            onVoteSuccess={handleVoteSuccess}
-            onNavigateResults={() => setActiveTab('results')}
-            onNavigateProof={() => setActiveTab('proof')}
-          />
+          wallet.isConnected ? (
+            <VotingPanel
+              elections={elections}
+              selectedElectionId={selectedElectionId}
+              onSelectElection={setSelectedElectionId}
+              wallet={wallet}
+              voterCred={voterCred}
+              spentNullifiers={spentNullifiers}
+              onVoteSuccess={handleVoteSuccess}
+              onNavigateResults={() => setActiveTab('results')}
+              onNavigateProof={() => setActiveTab('proof')}
+            />
+          ) : (
+            <WalletGate
+              actionName="Cast Your Confidential Ballot"
+              actionDescription="To guarantee one-person-one-vote and derive your cryptographic nullifier, you must connect an authorized Midnight wallet or mobile device enclave"
+              onConnect={() => setWalletModalOpen(true)}
+              onViewResults={() => setActiveTab('results')}
+            />
+          )
         )}
 
+        {/* Tab 2: Live Results — PUBLICLY VIEWABLE WITHOUT WALLET */}
         {activeTab === 'results' && (
           <ResultsView
             elections={elections}
@@ -307,24 +332,45 @@ export const App: React.FC = () => {
           />
         )}
 
+        {/* Tab 3: Participation Proof — Gated behind Wallet */}
         {activeTab === 'proof' && (
-          <ParticipationProof
-            elections={elections}
-            selectedElectionId={selectedElectionId}
-            onSelectElection={setSelectedElectionId}
-            voterCred={voterCred}
-          />
+          wallet.isConnected ? (
+            <ParticipationProof
+              elections={elections}
+              selectedElectionId={selectedElectionId}
+              onSelectElection={setSelectedElectionId}
+              voterCred={voterCred}
+            />
+          ) : (
+            <WalletGate
+              actionName="Generate Proof of Participation"
+              actionDescription="A cryptographic participation badge proves you cast a ballot in the election without revealing your identity or choice, requiring local wallet witness access"
+              onConnect={() => setWalletModalOpen(true)}
+              onViewResults={() => setActiveTab('results')}
+            />
+          )
         )}
 
+        {/* Tab 4: Organizer Hub — Gated behind Wallet */}
         {activeTab === 'organizer' && (
-          <OrganizerDashboard
-            elections={elections}
-            onCreateElection={handleCreateElection}
-            onToggleStatus={handleToggleStatus}
-            walletAddress={wallet.address}
-          />
+          wallet.isConnected ? (
+            <OrganizerDashboard
+              elections={elections}
+              onCreateElection={handleCreateElection}
+              onToggleStatus={handleToggleStatus}
+              walletAddress={wallet.address}
+            />
+          ) : (
+            <WalletGate
+              actionName="Create or Manage Proposals"
+              actionDescription="Election organizers must sign proposal deployment transactions with their Midnight wallet"
+              onConnect={() => setWalletModalOpen(true)}
+              onViewResults={() => setActiveTab('results')}
+            />
+          )
         )}
 
+        {/* Tab 5: Contract Inspector — PUBLICLY VIEWABLE */}
         {activeTab === 'contract' && <ContractInspector />}
       </main>
 
@@ -335,7 +381,7 @@ export const App: React.FC = () => {
         onClose={() => setWalletModalOpen(false)}
         wallet={wallet}
         onConnectLace={handleConnectLace}
-        onConnectDev={handleConnectDev}
+        onConnectMobileOrDev={handleConnectMobileOrDev}
         onDisconnect={handleDisconnect}
         onSwitchNetwork={handleSwitchNetwork}
       />
