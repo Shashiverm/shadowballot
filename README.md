@@ -4,10 +4,19 @@
 > A decentralized, zero-knowledge private voting platform engineered on the **Midnight Network**. Eligible voters cast confidential ballot choices via off-chain client-side ZK proofs, prevent double voting through cryptographic nullifiers, and publish publicly verifiable aggregate tallies—without ever revealing their identity, credentials, or individual selections to the blockchain or public observers.
 
 [![Midnight Preprod](https://img.shields.io/badge/Midnight-Preprod-f59e0b?style=flat-square)](https://explorer.preprod.midnight.network)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-shadowballot.vercel.app-10b981?style=flat-square&logo=vercel)](https://shadowballot.vercel.app/)
+[![Video Walkthrough](https://img.shields.io/badge/YouTube-Video%20Demo-red?style=flat-square&logo=youtube)](https://youtu.be/1QyBvoCFdss)
 [![CI Quality Gate](https://img.shields.io/badge/CI-Passing%20✓-10b981?style=flat-square)](https://github.com/Shashiverm/shadowballot/actions)
 [![Test Suite](https://img.shields.io/badge/Tests-10%2F10%20Passed-10b981?style=flat-square)](tests/shadowballot.test.ts)
 [![Compact Language](https://img.shields.io/badge/Compact-v0.23%20%7C%200.5.2-8b5cf6?style=flat-square)](contracts/shadowballot.compact)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
+
+---
+
+## 🌐 Live Application & Demo
+
+- 🚀 **Live dApp URL**: [https://shadowballot.vercel.app/](https://shadowballot.vercel.app/)
+- 🎥 **Video Walkthrough (YouTube)**: [https://youtu.be/1QyBvoCFdss](https://youtu.be/1QyBvoCFdss)
 
 ---
 
@@ -26,6 +35,9 @@
 ---
 
 ## Visual Walkthrough & System Screenshots
+
+> 📺 **Full Video Demonstration**: [Watch the ShadowBallot Walkthrough on YouTube (https://youtu.be/1QyBvoCFdss)](https://youtu.be/1QyBvoCFdss)  
+> 🌐 **Interactive Deployment**: [https://shadowballot.vercel.app/](https://shadowballot.vercel.app/)
 
 ### 1. Application Dashboard (Lunar Half-Light Half-Shadow Interface)
 The interface is engineered with an editorial obsidian lunar theme, live consensus metrics, and clear zero-knowledge boundary indicators.
