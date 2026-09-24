@@ -1,6 +1,6 @@
 import { Election, MidnightNetwork, VoteReceipt, WalletState, VoterCredential, ContractVerificationEvidence } from './types';
 import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import { deployContract, findDeployedContract, DeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
+import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { Contract } from '../../managed/contract/index.js';
 import { deriveNullifier } from './crypto';
 
@@ -379,7 +379,7 @@ export async function executeCastPrivateVote(
   }
 
   onStepProgress?.('3/5: Querying deployed Midnight contract via findDeployedContract()...');
-  const contractInstance: DeployedContract = await findDeployedContract(providers as any, {
+  const contractInstance: any = await (findDeployedContract as any)(providers as any, {
     contractAddress: election.contractAddress,
     compiledContract: Contract,
     privateStateId: `shadowballot_ps_${election.id}`
@@ -432,7 +432,7 @@ export async function executeDeployBallotContract(
   const providers = createMidnightProviders(wallet, network);
 
   onStepProgress?.('2/4: Generating zero-knowledge deployment transaction with initialize_election circuit...');
-  const deployed = await deployContract(providers as any, {
+  const deployed: any = await (deployContract as any)(providers as any, {
     compiledContract: Contract,
     privateStateId: 'shadowballot_organizer_state',
     initialPrivateState: {
