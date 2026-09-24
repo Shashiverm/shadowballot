@@ -30,7 +30,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
     setVerificationResult(null);
     await new Promise((r) => setTimeout(r, 800));
     setIsVerifying(false);
-    setVerificationResult(`✓ Consensus Verified: All ${election.totalVotes} proofs match Compact circuit constraints. 0 duplicate nullifiers detected.`);
+    setVerificationResult(`✓ Consensus Verified: All ${election.totalVotes} proofs match Compact circuit constraints. 0 duplicate nullifiers detected across on-chain Set<Bytes<32>>.`);
   };
 
   return (

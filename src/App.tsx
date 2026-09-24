@@ -165,7 +165,7 @@ export const App: React.FC = () => {
     const created: Election = {
       ...newElData,
       id: newId,
-      creatorAddress: wallet.address || newElData.creatorAddress || '020088b901a1827cf482a1782e4f019a82001'
+      creatorAddress: wallet.address || newElData.creatorAddress
     };
     setElections((prev) => [created, ...prev]);
     setSelectedElectionId(newId);
@@ -405,6 +405,7 @@ export const App: React.FC = () => {
               onCreateElection={handleCreateElection}
               onToggleStatus={handleToggleStatus}
               walletAddress={wallet.address}
+              wallet={wallet}
             />
           ) : (
             <WalletGate

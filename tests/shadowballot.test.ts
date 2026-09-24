@@ -57,7 +57,7 @@ interface SimLedger {
   tally1: bigint;
   tally2: bigint;
   tally3: bigint;
-  lastNullifier: Uint8Array;
+  nullifiers: Set<string>;
 }
 
 interface VoterWitness {
@@ -68,7 +68,6 @@ interface VoterWitness {
 
 class ShadowBallotSimulator {
   public ledger: SimLedger;
-  public spentNullifiers: Set<string>;
   public electionTitle: string;
   public options: string[];
 
@@ -80,9 +79,8 @@ class ShadowBallotSimulator {
       tally1: 0n,
       tally2: 0n,
       tally3: 0n,
-      lastNullifier: new Uint8Array(32)
+      nullifiers: new Set<string>()
     };
-    this.spentNullifiers = new Set<string>();
     this.electionTitle = 'Midnight Community Proposal 01';
     this.options = [
       'Privacy Protocols & Shielded State',
@@ -99,7 +97,7 @@ class ShadowBallotSimulator {
     this.ledger.tally1 = 0n;
     this.ledger.tally2 = 0n;
     this.ledger.tally3 = 0n;
-    this.spentNullifiers.clear();
+    this.ledger.nullifiers.clear();
   }
 
   public castPrivateVote(voter: VoterWitness, electionId: number, declaredOption: number): { success: boolean; error?: string; nullifierHex: string } {
@@ -124,14 +122,13 @@ class ShadowBallotSimulator {
       return { success: false, error: 'Invalid option index: Choice must be 0, 1, 2, or 3', nullifierHex };
     }
 
-    // Constraint 4: Nullifier uniqueness (prevent double-voting)
-    if (this.spentNullifiers.has(nullifierHex)) {
+    // Constraint 4: On-chain nullifier Set membership check (prevent double-voting)
+    if (this.ledger.nullifiers.has(nullifierHex)) {
       return { success: false, error: 'Nullifier already registered: Duplicate voting prevented', nullifierHex };
     }
 
-    // State transition
-    this.spentNullifiers.add(nullifierHex);
-    this.ledger.lastNullifier = nullifierBytes;
+    // State transition into on-chain Set<Bytes<32>>
+    this.ledger.nullifiers.add(nullifierHex);
     this.ledger.totalVotes += 1n;
 
     if (declaredOption === 0) this.ledger.tally0 += 1n;
@@ -226,23 +223,23 @@ async function runSuite() {
     `Out-of-range option index (choice 9) strictly rejected by bounds assertion`
   );
 
-  // Test 5: Double vote prevention (nullifier replay)
+  // Test 5: Double vote prevention (nullifier replay on Set)
   const resAliceDouble = sim.castPrivateVote(alice, 1, 0);
   assertTest(
     5,
-    'Double Vote Prevention (Nullifier Replay)',
-    Boolean(!resAliceDouble.success && resAliceDouble.error?.includes('Nullifier already registered')),
-    `Duplicate voting attempt by Alice rejected: Nullifier ${resAlice.nullifierHex.substring(0, 16)}... already registered`
+    'Double Vote Prevention (Nullifier Set Replay)',
+    Boolean(!resAliceDouble.success && resAliceDouble.error?.includes('Nullifier already registered') && sim.ledger.nullifiers.has(resAlice.nullifierHex)),
+    `Duplicate voting attempt by Alice rejected: Nullifier ${resAlice.nullifierHex.substring(0, 16)}... already registered in on-chain Set (size: ${sim.ledger.nullifiers.size})`
   );
 
   // Test 6: Private vote isolation
-  const ledgerSnapshot = JSON.stringify(sim.ledger, (k, v) => typeof v === 'bigint' ? v.toString() : v);
+  const ledgerSnapshot = JSON.stringify(sim.ledger, (k, v) => v instanceof Set ? Array.from(v) : typeof v === 'bigint' ? v.toString() : v);
   const secretLeaked = ledgerSnapshot.includes('alice_secret_seed') || ledgerSnapshot.includes('alice');
   assertTest(
     6,
-    'Private Vote Isolation',
-    !secretLeaked && sim.ledger.lastNullifier.length === 32,
-    `Verified on-chain ledger contains ONLY spent nullifier commitment and aggregate count. Zero witness leakage.`
+    'Private Vote Isolation & Nullifier Set Integrity',
+    !secretLeaked && sim.ledger.nullifiers.size === 1,
+    `Verified on-chain ledger contains ONLY spent nullifiers Set (${sim.ledger.nullifiers.size} entry) and aggregate count. Zero witness leakage.`
   );
 
   // Test 7: Correct public tally

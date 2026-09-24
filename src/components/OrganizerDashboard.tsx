@@ -1,21 +1,25 @@
 import React, { useState } from 'react';
-import { Election } from '../lib/types';
-import { MIDNIGHT_CONFIG } from '../lib/midnight';
+import { Election, WalletState } from '../lib/types';
+import { MIDNIGHT_CONFIG, MIDNIGHT_NETWORKS, executeDeployBallotContract } from '../lib/midnight';
 
 interface OrganizerDashboardProps {
   elections: Election[];
   onCreateElection: (newElection: Omit<Election, 'id'>) => void;
   onToggleStatus: (electionId: number) => void;
   walletAddress: string;
+  wallet?: WalletState;
 }
 
 export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
   elections,
   onCreateElection,
   onToggleStatus,
-  walletAddress
+  walletAddress,
+  wallet
 }) => {
   const [isCreating, setIsCreating] = useState(false);
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [deployStep, setDeployStep] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Protocol Governance');
@@ -39,42 +43,68 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
   const myCount = elections.filter(isOwner).length;
   const displayedElections = filter === 'my' ? elections.filter(isOwner) : elections;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !description || !opt0 || !opt1 || !opt2 || !opt3) {
       alert('Please fill all fields including 4 ballot options');
       return;
     }
 
-    onCreateElection({
-      title,
-      description,
-      category,
-      status: 'active',
-      totalVotes: 0,
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
-      creatorAddress: walletAddress || '020088b901a1827cf482a1782e4f019a82001',
-      contractAddress: MIDNIGHT_CONFIG.contractAddress,
-      quorum: parseInt(quorum) || 50,
-      options: [
-        { id: 0, label: opt0, description: 'Option 1 selection', voteCount: 0 },
-        { id: 1, label: opt1, description: 'Option 2 selection', voteCount: 0 },
-        { id: 2, label: opt2, description: 'Option 3 selection', voteCount: 0 },
-        { id: 3, label: opt3, description: 'Option 4 selection', voteCount: 0 }
-      ]
-    });
+    if (!walletAddress || !wallet?.isConnected) {
+      alert('Wallet Required: Connect Midnight Lace or Mobile Enclave to sign and deploy the smart contract on Midnight consensus.');
+      return;
+    }
 
-    // Reset form
-    setTitle('');
-    setDescription('');
-    setOpt0('');
-    setOpt1('');
-    setOpt2('');
-    setOpt3('');
-    setIsCreating(false);
-    // Auto-switch to My Proposals to see the newly deployed proposal
-    setFilter('my');
+    setIsDeploying(true);
+    setDeployStep('Initializing Midnight contract deployment pipeline...');
+
+    try {
+      const deployResult = await executeDeployBallotContract(
+        wallet,
+        {
+          title,
+          description,
+          category,
+          quorum: parseInt(quorum) || 50,
+          options: [opt0, opt1, opt2, opt3]
+        },
+        (step) => setDeployStep(step)
+      );
+
+      onCreateElection({
+        title,
+        description,
+        category,
+        status: 'active',
+        totalVotes: 0,
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+        creatorAddress: walletAddress,
+        contractAddress: deployResult.contractAddress,
+        quorum: parseInt(quorum) || 50,
+        options: [
+          { id: 0, label: opt0, description: 'Option 1 selection', voteCount: 0 },
+          { id: 1, label: opt1, description: 'Option 2 selection', voteCount: 0 },
+          { id: 2, label: opt2, description: 'Option 3 selection', voteCount: 0 },
+          { id: 3, label: opt3, description: 'Option 4 selection', voteCount: 0 }
+        ]
+      });
+
+      // Reset form
+      setTitle('');
+      setDescription('');
+      setOpt0('');
+      setOpt1('');
+      setOpt2('');
+      setOpt3('');
+      setIsCreating(false);
+      setFilter('my');
+    } catch (err: any) {
+      alert(`Deployment Failed: ${err?.message || 'Error executing deployContract()'}`);
+    } finally {
+      setIsDeploying(false);
+      setDeployStep('');
+    }
   };
 
   return (
@@ -388,17 +418,45 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
               type="button"
               className="btn-secondary"
               onClick={() => setIsCreating(false)}
+              disabled={isDeploying}
             >
               Cancel
             </button>
             <button
               type="submit"
               className="btn-primary"
+              disabled={isDeploying}
             >
-              Deploy Ballot to Midnight Preprod
+              {isDeploying ? 'Deploying to Midnight...' : `Deploy Ballot to Midnight ${(wallet?.network || 'preprod').toUpperCase()}`}
             </button>
           </div>
         </form>
+      )}
+
+      {/* Deployment Progress Modal */}
+      {isDeploying && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ textAlign: 'center', padding: '36px 24px' }}>
+            <div style={{
+              width: '60px',
+              height: '60px',
+              border: '4px solid rgba(139, 92, 246, 0.2)',
+              borderTopColor: 'var(--violet-primary)',
+              borderRadius: '50%',
+              margin: '0 auto 20px',
+              animation: 'spin 0.8s linear infinite'
+            }} />
+            <h3 className="font-display" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
+              Deploying Midnight Contract
+            </h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--violet-light)', marginBottom: '16px' }}>
+              {deployStep}
+            </p>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+              Executing <code>deployContract()</code> on Midnight {(wallet?.network || 'preprod').toUpperCase()}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Active Elections Management List with Ownership & Permissions */}
@@ -485,7 +543,7 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
                     onClick={() => {
                       const manifest = {
                         protocol: 'ShadowBallot Confidential Voting',
-                        contractAddress: MIDNIGHT_CONFIG.contractAddress,
+                        contractAddress: el.contractAddress || MIDNIGHT_CONFIG.contractAddress,
                         deploymentTx: MIDNIGHT_CONFIG.deploymentTx,
                         electionId: el.id,
                         title: el.title,
@@ -498,7 +556,8 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
                         options: el.options,
                         startDate: el.startDate,
                         endDate: el.endDate,
-                        circuitBytecodeHash: '0x94f02a1b7e0984c10284e912bc084129',
+                        circuitBytecodeHash: '0x2fd7eec3b567793f109866a56f5c9ae7882b7f6dc50bbe5cb407425d5217be3b',
+                        nullifierStorage: 'Set<Bytes<32>>',
                         merkleStateRoot: '0x7b84c01d9f45610e7a2b91c834e590a21bc9081e4d3a201b5f7e8a91c034b156',
                         exportedAt: new Date().toISOString()
                       };

@@ -43,7 +43,7 @@ export ledger tally0: Uint<32>;
 export ledger tally1: Uint<32>;
 export ledger tally2: Uint<32>;
 export ledger tally3: Uint<32>;
-export ledger lastNullifier: Bytes<32>;
+export ledger nullifiers: Set<Bytes<32>>;
 
 // Private witnesses provided by the local voter client
 witness get_voter_secret(): Bytes<32>;
@@ -80,8 +80,10 @@ export circuit cast_private_vote(disclosedNullifier: Bytes<32>, optionChoice: Ui
     assert(privateChoice == optionChoice, "Choice mismatch: Disclosed option must match witness selection");
     assert(privateChoice < 4, "Invalid option index: Choice must be 0, 1, 2, or 3");
 
-    // 4. Record nullifier to prevent double voting
-    lastNullifier = disclose(disclosedNullifier);
+    // 4. Record nullifier to prevent double voting via on-chain Set membership check
+    const nullifierCommitment = disclose(disclosedNullifier);
+    assert(!nullifiers.member(nullifierCommitment), "Nullifier already registered: Duplicate voting prevented");
+    nullifiers.insert(nullifierCommitment);
 
     // 5. Deliberately disclose the option index for verifiable tally incrementation
     // while keeping voter identity, secret key, and eligibility completely shielded

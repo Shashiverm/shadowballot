@@ -44,7 +44,8 @@ export type Ledger = {
   readonly tally1: bigint;
   readonly tally2: bigint;
   readonly tally3: bigint;
-  readonly lastNullifier: Uint8Array;
+  readonly nullifiers: Set<string>;
+  readonly lastNullifier?: Uint8Array;
 }
 
 export type ContractReferenceLocations = any;

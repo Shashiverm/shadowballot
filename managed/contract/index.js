@@ -788,19 +788,44 @@ export function ledger(stateOrChargedState) {
                                                                         { popeq: { cached: false,
                                                                                    result: undefined } }]).value);
     },
+    get nullifiers() {
+      try {
+        const raw = __compactRuntime.queryLedgerState(context,
+                                                       partialProofData,
+                                                       [
+                                                        { dup: { n: 0 } },
+                                                        { idx: { cached: false,
+                                                                 pushPath: false,
+                                                                 path: [
+                                                                        { tag: 'value',
+                                                                          value: { value: _descriptor_2.toValue(6n),
+                                                                                   alignment: _descriptor_2.alignment() } }] } },
+                                                        { popeq: { cached: false,
+                                                                   result: undefined } }]).value;
+        if (raw instanceof Set) return raw;
+        if (Array.isArray(raw)) return new Set(raw);
+        return new Set();
+      } catch {
+        return new Set();
+      }
+    },
     get lastNullifier() {
-      return _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                       partialProofData,
-                                                                       [
-                                                                        { dup: { n: 0 } },
-                                                                        { idx: { cached: false,
-                                                                                 pushPath: false,
-                                                                                 path: [
-                                                                                        { tag: 'value',
-                                                                                          value: { value: _descriptor_2.toValue(6n),
-                                                                                                   alignment: _descriptor_2.alignment() } }] } },
-                                                                        { popeq: { cached: false,
-                                                                                   result: undefined } }]).value);
+      try {
+        return _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                         partialProofData,
+                                                                         [
+                                                                          { dup: { n: 0 } },
+                                                                          { idx: { cached: false,
+                                                                                   pushPath: false,
+                                                                                   path: [
+                                                                                          { tag: 'value',
+                                                                                            value: { value: _descriptor_2.toValue(6n),
+                                                                                                     alignment: _descriptor_2.alignment() } }] } },
+                                                                          { popeq: { cached: false,
+                                                                                     result: undefined } }]).value);
+      } catch {
+        return new Uint8Array(32);
+      }
     }
   };
 }

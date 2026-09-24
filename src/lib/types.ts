@@ -1,4 +1,4 @@
-export type MidnightNetwork = 'preprod' | 'testnet' | 'preview' | 'devnet' | 'undeployed';
+export type MidnightNetwork = 'preprod' | 'preview';
 
 export interface BallotOption {
   id: number;
@@ -27,11 +27,14 @@ export interface WalletState {
   isConnecting: boolean;
   isInstalled: boolean;
   address: string;
+  shieldedAddress?: string;
   balance: number;
+  dustBalance?: bigint;
   network: MidnightNetwork;
   walletName: string;
   isDevKeystore: boolean;
   error: string | null;
+  dappApiInstance?: any;
 }
 
 export interface VoterCredential {
@@ -42,11 +45,16 @@ export interface VoterCredential {
 }
 
 export interface VoteReceipt {
+  txId: string;
   txHash: string;
   nullifierHash: string;
   electionId: number;
   timestamp: string;
   blockHeight: number;
+  blockHash?: string;
+  status: string;
+  contractAddress: string;
+  networkId: MidnightNetwork;
   proofTimeMs: number;
   zkCircuit: string;
 }
@@ -59,4 +67,18 @@ export interface ParticipationAttestation {
   issuedAt: string;
   circuitSignature: string;
   selectiveDisclosureClaim: string;
+}
+
+export interface ContractVerificationEvidence {
+  contractAddress: string;
+  networkId: MidnightNetwork;
+  compactVersion: string;
+  compilerVersion: string;
+  sourceCodeHash: string;
+  circuitZkirHash: string;
+  verifierKeyHash: string;
+  deployedBytecodeMatched: boolean;
+  verifiedAt: string;
+  circuits: string[];
+  publicLedgerFields: string[];
 }

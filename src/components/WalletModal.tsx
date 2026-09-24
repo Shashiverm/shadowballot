@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { WalletState, MidnightNetwork } from '../lib/types';
-import { MIDNIGHT_CONFIG } from '../lib/midnight';
+import { MIDNIGHT_CONFIG, MIDNIGHT_NETWORKS } from '../lib/midnight';
 import { discoverMidnightWallets, DiscoveredWallet } from '../lib/wallet';
 
 interface WalletModalProps {
@@ -97,7 +97,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({
             }}>
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Target Network:</span>
               <div style={{ display: 'flex', gap: '4px' }}>
-                {(['preprod', 'testnet', 'preview'] as MidnightNetwork[]).map((net) => (
+                {(['preprod', 'preview'] as MidnightNetwork[]).map((net) => (
                   <button
                     key={net}
                     type="button"
@@ -139,12 +139,12 @@ export const WalletModal: React.FC<WalletModalProps> = ({
                       type="button"
                       className="btn-secondary"
                       onClick={() => {
-                        onSwitchNetwork(wallet.network === 'preprod' ? 'testnet' : 'preprod');
+                        onSwitchNetwork(wallet.network === 'preprod' ? 'preview' : 'preprod');
                         onConnectInjected();
                       }}
                       style={{ fontSize: '0.75rem', padding: '4px 10px' }}
                     >
-                      🔄 Switch to {wallet.network === 'preprod' ? 'TESTNET' : 'PREPROD'} & Reconnect
+                      🔄 Switch to {wallet.network === 'preprod' ? 'PREVIEW' : 'PREPROD'} & Reconnect
                     </button>
                     <button
                       type="button"
@@ -308,7 +308,7 @@ export const WalletModal: React.FC<WalletModalProps> = ({
 
             <div style={{ display: 'flex', gap: '10px' }}>
               <a
-                href={`${MIDNIGHT_CONFIG.explorerUrl}/address/${wallet.address}`}
+                href={`${MIDNIGHT_NETWORKS[wallet.network]?.explorerUrl || MIDNIGHT_CONFIG.explorerUrl}/address/${wallet.address}`}
                 target="_blank"
                 rel="noreferrer"
                 className="btn-secondary"

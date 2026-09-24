@@ -166,10 +166,10 @@
       }
     },
     {
-      "name": "lastNullifier",
+      "name": "nullifiers",
       "index": 6,
       "exported": true,
-      "storage": "Cell",
+      "storage": "Set",
       "type": {
         "type-name": "Bytes",
         "length": 32
