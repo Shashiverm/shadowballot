@@ -1,8 +1,6 @@
 import { WalletState, MidnightNetwork } from './types';
 import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 
-export const STORAGE_WALLET_KEY = 'shadowballot_mobile_enclave_v1';
-
 export interface DiscoveredWallet {
   id: string;
   name: string;
@@ -12,16 +10,9 @@ export interface DiscoveredWallet {
   instance: any;
 }
 
-export interface MobileEnclaveData {
-  unshieldedAddress: string;
-  shieldedAddress: string;
-  seed: string;
-  created: string;
-}
-
 /**
  * Scan window.midnight for all injected Midnight wallets
- * compliant with CAIP-372 / @midnight-ntwrk/dapp-connector-api v4
+ * compliant with CAIP-372 / @midnight-ntwrk/dapp-connector-api
  */
 export function discoverMidnightWallets(): DiscoveredWallet[] {
   const wallets: DiscoveredWallet[] = [];
@@ -50,31 +41,13 @@ export function discoverMidnightWallets(): DiscoveredWallet[] {
 }
 
 /**
- * Get or create local device cryptographic enclave (for mobile & sandbox testing)
+ * Checks whether an official Midnight wallet is installed and available in the browser window
  */
-export function getOrCreateMobileEnclave(): MobileEnclaveData {
-  const stored = localStorage.getItem(STORAGE_WALLET_KEY);
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch {
-      // re-initialize on parse failure
-    }
-  }
-
-  const entropy = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-
-  const enclave: MobileEnclaveData = {
-    unshieldedAddress: `mn_addr_test1${entropy.substring(0, 24)}`,
-    shieldedAddress: `mn_shielded1${entropy.substring(0, 32)}`,
-    seed: `shielded_entropy_${entropy}`,
-    created: new Date().toISOString()
-  };
-
-  localStorage.setItem(STORAGE_WALLET_KEY, JSON.stringify(enclave));
-  return enclave;
+export function isMidnightWalletAvailable(): boolean {
+  if (typeof window === 'undefined') return false;
+  const midnightObj = (window as any).midnight;
+  if (!midnightObj || typeof midnightObj !== 'object') return false;
+  return Boolean(midnightObj.mnLace || Object.keys(midnightObj).length > 0);
 }
 
 /**
@@ -88,8 +61,9 @@ export function normalizeNetworkId(raw: string | undefined | null): MidnightNetw
 }
 
 /**
- * Connect to an injected Midnight wallet (Lace, etc.) via official DApp Connector API v4
+ * Connect to an injected Midnight wallet (Midnight Lace, etc.) via official DApp Connector API
  * Sets the global network ID using setNetworkId('preprod' | 'preview')
+ * Strictly utilizes authentic wallet addresses and state; NO fabricated paths.
  */
 export async function connectInjectedWallet(
   walletId?: string,
@@ -98,13 +72,15 @@ export async function connectInjectedWallet(
   const midnightObj = (window as any).midnight;
 
   if (!midnightObj) {
-    throw new Error('No Midnight wallet detected in browser. Please install the Midnight Lace extension.');
+    throw new Error(
+      'No Midnight wallet detected in browser. Please install the official Midnight Lace extension from Chrome Web Store.'
+    );
   }
 
   // Set the global network identifier in Midnight.js runtime
   setNetworkId(targetNetwork);
 
-  // Find target candidate wallet
+  // Find target candidate wallet (prefer mnLace or requested id)
   let targetWallet = walletId ? midnightObj[walletId] : null;
 
   if (!targetWallet) {
@@ -119,7 +95,7 @@ export async function connectInjectedWallet(
   }
 
   if (!targetWallet) {
-    throw new Error('No compatible Midnight wallet provider found.');
+    throw new Error('No compatible Midnight DApp Connector wallet found.');
   }
 
   try {
@@ -132,22 +108,22 @@ export async function connectInjectedWallet(
         connectedApi = await targetWallet.connect(targetNetwork);
       } catch (firstErr: any) {
         const errMsg = String(firstErr?.message || firstErr || '');
-        const isMismatch = /network\s*id\s*mismatch|mismatch/i.test(errMsg);
+        const isMismatch = /network\s*id\s*mismatch|mismatch|network/i.test(errMsg);
 
         if (isMismatch) {
-          // Attempt connect with fallback network
+          // Attempt connect with alternate network if wallet is locked to preview/preprod
           const fallbackNet: MidnightNetwork = targetNetwork === 'preprod' ? 'preview' : 'preprod';
           try {
             connectedApi = await targetWallet.connect(fallbackNet);
             actualNetwork = fallbackNet;
             setNetworkId(fallbackNet);
           } catch {
-            // Attempt connect() with no argument
+            // Attempt connect() with no argument as fallback
             try {
               connectedApi = await (targetWallet.connect as any)();
             } catch {
               throw new Error(
-                `Network ID mismatch: Lace is set to a different network. ` +
+                `Network ID mismatch: The connected Midnight wallet is configured for a different network. ` +
                 `Please switch the active network in your Midnight Lace extension to ${targetNetwork.toUpperCase()}.`
               );
             }
@@ -160,33 +136,46 @@ export async function connectInjectedWallet(
       // Legacy enable fallback
       connectedApi = await targetWallet.enable();
     } else {
-      throw new Error('Wallet provider does not implement DApp Connector connect() method.');
+      throw new Error('Wallet provider does not implement the official DApp Connector connect() method.');
+    }
+
+    if (!connectedApi) {
+      throw new Error('Wallet connection was refused or did not return a valid ConnectedAPI instance.');
     }
 
     // Inspect detected network from connected API if exposed
     try {
-      if (typeof connectedApi.getNetworkId === 'function') {
+      if (typeof connectedApi.getConfiguration === 'function') {
+        const config = await connectedApi.getConfiguration();
+        if (config?.networkId) {
+          actualNetwork = normalizeNetworkId(config.networkId);
+          setNetworkId(actualNetwork);
+        }
+      } else if (typeof connectedApi.getConnectionStatus === 'function') {
+        const connStatus = await connectedApi.getConnectionStatus();
+        if (connStatus?.networkId) {
+          actualNetwork = normalizeNetworkId(connStatus.networkId);
+          setNetworkId(actualNetwork);
+        }
+      } else if (typeof connectedApi.getNetworkId === 'function') {
         const netId = await connectedApi.getNetworkId();
         if (netId) {
           actualNetwork = normalizeNetworkId(netId);
           setNetworkId(actualNetwork);
         }
-      } else if (targetWallet.networkId) {
-        actualNetwork = normalizeNetworkId(targetWallet.networkId);
-        setNetworkId(actualNetwork);
       }
     } catch {
-      // keep actualNetwork
+      // Keep actualNetwork
     }
 
-    // Retrieve real unshielded address (NEVER FABRICATED)
+    // Retrieve genuine unshielded address (NEVER FABRICATED)
     let unshieldedAddress = '';
     if (typeof connectedApi.getUnshieldedAddress === 'function') {
       const addrObj = await connectedApi.getUnshieldedAddress();
       unshieldedAddress = addrObj?.unshieldedAddress || '';
     } else if (typeof connectedApi.getUnshieldedAddresses === 'function') {
       const addrs = await connectedApi.getUnshieldedAddresses();
-      unshieldedAddress = addrs[0] || '';
+      unshieldedAddress = Array.isArray(addrs) ? addrs[0] : (addrs?.unshieldedAddress || '');
     } else if (typeof connectedApi.state === 'function') {
       const stateObj = await connectedApi.state();
       unshieldedAddress = stateObj?.address || '';
@@ -196,25 +185,42 @@ export async function connectInjectedWallet(
       throw new Error('Connected Midnight wallet did not expose an active account address.');
     }
 
-    // Retrieve real shielded address if available
+    // Retrieve genuine shielded addresses (NEVER FABRICATED)
     let shieldedAddress = '';
+    let shieldedCoinPublicKey = '';
+    let shieldedEncryptionPublicKey = '';
     try {
       if (typeof connectedApi.getShieldedAddresses === 'function') {
         const shieldedObj = await connectedApi.getShieldedAddresses();
         shieldedAddress = shieldedObj?.shieldedAddress || '';
+        shieldedCoinPublicKey = shieldedObj?.shieldedCoinPublicKey || '';
+        shieldedEncryptionPublicKey = shieldedObj?.shieldedEncryptionPublicKey || '';
       }
     } catch {
-      // optional
+      // Optional if not supported by wallet
     }
 
-    // Retrieve real dust / token balance (NEVER FABRICATED)
+    // Retrieve genuine Dust address
+    let dustAddress = '';
+    try {
+      if (typeof connectedApi.getDustAddress === 'function') {
+        const dustAddrObj = await connectedApi.getDustAddress();
+        dustAddress = dustAddrObj?.dustAddress || '';
+      }
+    } catch {
+      // Optional
+    }
+
+    // Retrieve genuine balance (NEVER FABRICATED)
     let balance = 0;
     let dustBalance: bigint | undefined = undefined;
+    let dustCap: bigint | undefined = undefined;
     try {
       if (typeof connectedApi.getDustBalance === 'function') {
         const dust = await connectedApi.getDustBalance();
         if (dust && dust.balance !== undefined) {
           dustBalance = BigInt(dust.balance);
+          dustCap = dust.cap !== undefined ? BigInt(dust.cap) : undefined;
           balance = Number(dustBalance);
         }
       } else if (typeof connectedApi.getUnshieldedBalances === 'function') {
@@ -236,35 +242,20 @@ export async function connectInjectedWallet(
       isInstalled: true,
       address: unshieldedAddress,
       shieldedAddress,
+      shieldedCoinPublicKey,
+      shieldedEncryptionPublicKey,
+      dustAddress,
       balance,
       dustBalance,
+      dustCap,
       network: actualNetwork,
-      walletName: targetWallet.name || 'Midnight Lace Extension',
-      isDevKeystore: false,
+      walletName: targetWallet.name || (targetWallet === midnightObj.mnLace ? 'Midnight Lace' : 'Midnight DApp Connector'),
+      rdns: targetWallet.rdns || 'network.midnight.lace',
+      apiVersion: targetWallet.apiVersion || '4.0.1',
       error: null,
       dappApiInstance: connectedApi
     };
   } catch (err: any) {
     throw new Error(err?.message || 'Failed to authenticate with Midnight wallet.');
   }
-}
-
-/**
- * Connect to Mobile Enclave / Local Dev Sandbox Keystore
- */
-export async function connectMobileEnclave(network: MidnightNetwork = 'preprod'): Promise<WalletState> {
-  setNetworkId(network);
-  const enclave = getOrCreateMobileEnclave();
-  return {
-    isConnected: true,
-    isConnecting: false,
-    isInstalled: true,
-    address: enclave.unshieldedAddress,
-    shieldedAddress: enclave.shieldedAddress,
-    balance: 0,
-    network,
-    walletName: 'Mobile Midnight Enclave (Shielded)',
-    isDevKeystore: true,
-    error: null
-  };
 }

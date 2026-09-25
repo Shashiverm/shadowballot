@@ -55,7 +55,7 @@ export const WalletGate: React.FC<WalletGateProps> = ({
         </h3>
 
         <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6, marginBottom: '28px' }}>
-          {actionDescription}. In accordance with ShadowBallot's zero-knowledge security guarantees, public results can be audited freely, but casting a ballot or generating proofs requires an authenticated Midnight wallet or mobile device enclave.
+          {actionDescription}. In accordance with ShadowBallot's zero-knowledge security guarantees, public results can be audited freely, but casting a ballot or generating proofs requires an authenticated Midnight DApp Connector wallet (such as Midnight Lace on Preprod or Preview).
         </p>
 
         {/* Security badges */}
@@ -76,7 +76,7 @@ export const WalletGate: React.FC<WalletGateProps> = ({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#34d399' }}>
             <span>✓</span>
-            <span>Mobile Device Enclave</span>
+            <span>Official DApp Connector (CAIP-372)</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#34d399' }}>
             <span>✓</span>

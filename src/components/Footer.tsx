@@ -207,7 +207,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, network = 'PREPROD' 
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
             <span>
-              Client-Side Zero-Knowledge Privacy: Raw ballot choices and voter credentials never leave your browser enclave.
+              Client-Side Zero-Knowledge Privacy: Raw ballot choices and voter credentials never leave your client-side private state.
             </span>
           </div>
           <div className="footer-bottom-copy">

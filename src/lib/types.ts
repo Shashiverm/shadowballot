@@ -28,11 +28,16 @@ export interface WalletState {
   isInstalled: boolean;
   address: string;
   shieldedAddress?: string;
+  shieldedCoinPublicKey?: string;
+  shieldedEncryptionPublicKey?: string;
+  dustAddress?: string;
   balance: number;
   dustBalance?: bigint;
+  dustCap?: bigint;
   network: MidnightNetwork;
   walletName: string;
-  isDevKeystore: boolean;
+  rdns?: string;
+  apiVersion?: string;
   error: string | null;
   dappApiInstance?: any;
 }
@@ -69,16 +74,30 @@ export interface ParticipationAttestation {
   selectiveDisclosureClaim: string;
 }
 
+export interface CircuitVerificationInfo {
+  name: string;
+  zkirHash: string;
+  verifierKeyHash: string;
+  proverKeyHash: string;
+  sizeBytes: number;
+}
+
 export interface ContractVerificationEvidence {
   contractAddress: string;
   networkId: MidnightNetwork;
   compactVersion: string;
   compilerVersion: string;
+  deploymentTx: string;
+  blockHeight: number;
+  blockHash: string;
   sourceCodeHash: string;
   circuitZkirHash: string;
   verifierKeyHash: string;
+  circuits: CircuitVerificationInfo[];
   deployedBytecodeMatched: boolean;
   verifiedAt: string;
-  circuits: string[];
   publicLedgerFields: string[];
+  explorerUrl: string;
+  indexerUrl: string;
+  proofServerUrl: string;
 }

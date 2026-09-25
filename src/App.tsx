@@ -9,9 +9,9 @@ import { WalletModal } from './components/WalletModal';
 import { WalletGate } from './components/WalletGate';
 import { Footer } from './components/Footer';
 import { Election, WalletState, VoterCredential, VoteReceipt, MidnightNetwork } from './lib/types';
-import { INITIAL_ELECTIONS } from './lib/midnight';
+import { INITIAL_ELECTIONS, setMidnightNetwork } from './lib/midnight';
 import { getOrCreateVoterCredential } from './lib/crypto';
-import { connectInjectedWallet, connectMobileEnclave, discoverMidnightWallets } from './lib/wallet';
+import { connectInjectedWallet, discoverMidnightWallets } from './lib/wallet';
 
 type PageTab = 'vote' | 'results' | 'proof' | 'organizer' | 'contract';
 
@@ -45,7 +45,6 @@ export const App: React.FC = () => {
     balance: 0,
     network: 'preprod',
     walletName: '',
-    isDevKeystore: false,
     error: null
   });
 
@@ -61,6 +60,9 @@ export const App: React.FC = () => {
 
   // Route redirection and popstate listener
   useEffect(() => {
+    // Configure default network ID
+    setMidnightNetwork('preprod');
+
     const currentTab = getTabFromLocation();
     const targetPath = currentTab === 'vote' ? '/vote' : `/${currentTab}`;
 
@@ -99,22 +101,7 @@ export const App: React.FC = () => {
       setWallet((prev) => ({
         ...prev,
         isConnecting: false,
-        error: err?.message || 'Failed to connect Midnight Lace. Try the Mobile Enclave.'
-      }));
-    }
-  };
-
-  const handleConnectMobileOrEnclave = async () => {
-    setWallet((prev) => ({ ...prev, isConnecting: true, error: null }));
-    try {
-      const connectedState = await connectMobileEnclave(wallet.network);
-      setWallet(connectedState);
-      setWalletModalOpen(false);
-    } catch (err: any) {
-      setWallet((prev) => ({
-        ...prev,
-        isConnecting: false,
-        error: err?.message || 'Failed to initialize device enclave.'
+        error: err?.message || 'Failed to connect Midnight Lace or DApp Connector.'
       }));
     }
   };
@@ -128,13 +115,13 @@ export const App: React.FC = () => {
       balance: 0,
       network: 'preprod',
       walletName: '',
-      isDevKeystore: false,
       error: null
     });
     setWalletModalOpen(false);
   };
 
   const handleSwitchNetwork = (network: MidnightNetwork) => {
+    setMidnightNetwork(network);
     setWallet((prev) => ({ ...prev, network }));
   };
 
@@ -303,7 +290,7 @@ export const App: React.FC = () => {
                     </li>
                     <li className="privacy-item">
                       <span className="item-badge badge-shielded">Voter Secret</span>
-                      <span>Kept in browser enclave to derive nullifiers</span>
+                      <span>Kept in client-side private state to derive nullifiers</span>
                     </li>
                     <li className="privacy-item">
                       <span className="item-badge badge-shielded">Eligibility Flag</span>
@@ -360,7 +347,7 @@ export const App: React.FC = () => {
           ) : (
             <WalletGate
               actionName="Cast Your Confidential Ballot"
-              actionDescription="To guarantee one-person-one-vote and derive your cryptographic nullifier, you must connect an authorized Midnight wallet or mobile device enclave"
+              actionDescription="To guarantee one-person-one-vote and derive your cryptographic nullifier, you must connect an authorized Midnight DApp Connector wallet (such as Midnight Lace)"
               onConnect={() => setWalletModalOpen(true)}
               onViewResults={() => setActiveTab('results')}
             />
@@ -428,7 +415,6 @@ export const App: React.FC = () => {
         onClose={() => setWalletModalOpen(false)}
         wallet={wallet}
         onConnectInjected={handleConnectInjected}
-        onConnectMobileOrEnclave={handleConnectMobileOrEnclave}
         onDisconnect={handleDisconnect}
         onSwitchNetwork={handleSwitchNetwork}
       />

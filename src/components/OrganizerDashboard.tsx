@@ -51,7 +51,7 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
     }
 
     if (!walletAddress || !wallet?.isConnected) {
-      alert('Wallet Required: Connect Midnight Lace or Mobile Enclave to sign and deploy the smart contract on Midnight consensus.');
+      alert('Wallet Required: Connect an authorized Midnight DApp Connector wallet (such as Midnight Lace) to sign and deploy the smart contract on Midnight consensus.');
       return;
     }
 
