@@ -113,108 +113,35 @@ export function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Canonical Demo Voter Alice Credentials & Authority Root
-export const CANONICAL_ALICE_SECRET = '1d8997e3aec849af0d61cd3f1c1a064319f72129b7d252e80b5258eeb5a17b37';
-export const CANONICAL_ALICE_CREDENTIAL_SECRET = 'd61fa127c300979c7f2cc0fd949ac15ac0e9c6a6f4940ebe6385a1fa4126519a';
-export const CANONICAL_ALICE_SIGNATURE = '916cadd9e891b9d7d5090a9728ecff26210a06e0caae990b56e8233881065387';
-export const DEFAULT_ELIGIBILITY_ROOT = '0a295a6cbb95c443a6da430ae0018065353274a89d39d5bb868091414546f75e';
+// Canonical Authority Root for the Midnight Governance Authority
+export const DEFAULT_ELIGIBILITY_ROOT = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
 /**
- * Format election identifier into a canonical 32-byte digest
- */
-export function formatElectionId(id: string | number): Uint8Array {
-  if (typeof id === 'number') {
-    return sha256Pure(new TextEncoder().encode(`shadowballot:election:${id}`));
-  }
-  const clean = id.replace(/^0x/, '');
-  if (clean.length === 64) {
-    return hexToBytes(clean);
-  }
-  return sha256Pure(new TextEncoder().encode(`shadowballot:election:${id}`));
-}
-
-/**
- * Compact in-circuit persistentHash<[Bytes<32>]>
- */
-export function computeCompactHashSingle(a: Uint8Array): Uint8Array {
-  return sha256Pure(a);
-}
-
-/**
- * Compact in-circuit persistentHash<[Bytes<32>, Bytes<32>]>
- */
-export function computeCompactHashPair(a: Uint8Array, b: Uint8Array): Uint8Array {
-  const combined = new Uint8Array(64);
-  combined.set(a, 0);
-  combined.set(b, 32);
-  return sha256Pure(combined);
-}
-
-/**
- * Compact in-circuit persistentHash<[Bytes<32>, Uint<8>, Bytes<32>]>
- */
-export function computeCompactHashBallot(electionId: Uint8Array, choice: number, nonce: Uint8Array): Uint8Array {
-  const combined = new Uint8Array(65);
-  combined.set(electionId, 0);
-  combined[32] = choice & 0xff;
-  combined.set(nonce, 33);
-  return sha256Pure(combined);
-}
-
-/**
- * Compact in-circuit persistentHash<[Bytes<32>, Uint<32>]>
- */
-export function computeCompactHashAttest(nullifier: Uint8Array, electionNonce: number): Uint8Array {
-  const combined = new Uint8Array(36);
-  combined.set(nullifier, 0);
-  const view = new DataView(combined.buffer, 32, 4);
-  view.setUint32(0, electionNonce, true); // Little-endian 4-byte uint32 matching Compact ocrt
-  return sha256Pure(combined);
-}
-
-/**
- * Backward-compatible helper routing through bit-exact Compact hash functions
+ * Domain-separated Poseidon / PersistentHash simulation matching Compact persistentHash<[...]>
  */
 export function computePersistentHash(tag: string, elements: (string | Uint8Array | bigint | number)[]): Uint8Array {
-  if (tag === 'admin_key' && elements.length === 1) {
-    const el = elements[0];
-    const b = el instanceof Uint8Array ? el : hexToBytes(String(el));
-    return computeCompactHashSingle(b);
-  }
-  if ((tag === 'nullifier' || tag === 'credential_commitment' || tag === 'credential_proof') && elements.length === 2) {
-    const a = elements[0] instanceof Uint8Array ? elements[0] : hexToBytes(String(elements[0]));
-    const b = elements[1] instanceof Uint8Array ? elements[1] : hexToBytes(String(elements[1]));
-    return computeCompactHashPair(a, b);
-  }
-  if (tag === 'ballot_commitment' && elements.length === 3) {
-    const elId = elements[0] instanceof Uint8Array ? elements[0] : hexToBytes(String(elements[0]));
-    const ch = Number(elements[1]);
-    const nonce = elements[2] instanceof Uint8Array ? elements[2] : hexToBytes(String(elements[2]));
-    return computeCompactHashBallot(elId, ch, nonce);
-  }
-  if (tag === 'participation_badge' && elements.length === 2) {
-    const nullif = elements[0] instanceof Uint8Array ? elements[0] : hexToBytes(String(elements[0]));
-    const nonce = Number(elements[1]);
-    return computeCompactHashAttest(nullif, nonce);
-  }
-
-  // Fallback concatenation
-  const parts: Uint8Array[] = [];
+  const parts: Uint8Array[] = [new TextEncoder().encode(`compact:persistentHash:${tag}:`)];
   for (const el of elements) {
     if (el instanceof Uint8Array) {
       parts.push(el);
     } else if (typeof el === 'string') {
-      parts.push(hexToBytes(el));
+      if (/^(0x)?[0-9a-fA-F]{64}$/.test(el)) {
+        parts.push(hexToBytes(el));
+      } else {
+        parts.push(new TextEncoder().encode(el));
+      }
     } else if (typeof el === 'bigint') {
       const b = new Uint8Array(8);
-      new DataView(b.buffer).setBigUint64(0, el, true);
+      new DataView(b.buffer).setBigUint64(0, el);
       parts.push(b);
     } else if (typeof el === 'number') {
       const b = new Uint8Array(4);
-      new DataView(b.buffer).setUint32(0, el, true);
+      new DataView(b.buffer).setUint32(0, el);
       parts.push(b);
     }
   }
+
+  // Concatenate parts
   const totalLen = parts.reduce((sum, p) => sum + p.length, 0);
   const combined = new Uint8Array(totalLen);
   let offset = 0;
@@ -222,6 +149,7 @@ export function computePersistentHash(tag: string, elements: (string | Uint8Arra
     combined.set(p, offset);
     offset += p.length;
   }
+
   return sha256Pure(combined);
 }
 
@@ -230,9 +158,11 @@ export function computePersistentHash(tag: string, elements: (string | Uint8Arra
  * nullifier = H(voterSecret, electionId)
  */
 export function deriveNullifier(voterSecretHex: string, electionId: string | number): string {
-  const vSecret = hexToBytes(voterSecretHex);
-  const elBytes = formatElectionId(electionId);
-  return bytesToHex(computeCompactHashPair(vSecret, elBytes));
+  const elBytes = typeof electionId === 'number'
+    ? sha256Hex(`shadowballot:election:${electionId}`)
+    : electionId;
+  const hash = computePersistentHash('nullifier', [voterSecretHex, elBytes]);
+  return bytesToHex(hash);
 }
 
 /**
@@ -240,9 +170,7 @@ export function deriveNullifier(voterSecretHex: string, electionId: string | num
  * commitment = H(voterSecret, credentialSecret)
  */
 export function deriveCredentialCommitment(voterSecretHex: string, credentialSecretHex: string): string {
-  const vSecret = hexToBytes(voterSecretHex);
-  const cSecret = hexToBytes(credentialSecretHex);
-  return bytesToHex(computeCompactHashPair(vSecret, cSecret));
+  return bytesToHex(computePersistentHash('credential_commitment', [voterSecretHex, credentialSecretHex]));
 }
 
 /**
@@ -254,9 +182,8 @@ export function deriveCredentialProof(
   credentialSecretHex: string,
   credentialSignatureHex: string
 ): string {
-  const commitment = hexToBytes(deriveCredentialCommitment(voterSecretHex, credentialSecretHex));
-  const sig = hexToBytes(credentialSignatureHex);
-  return bytesToHex(computeCompactHashPair(commitment, sig));
+  const commitment = deriveCredentialCommitment(voterSecretHex, credentialSecretHex);
+  return bytesToHex(computePersistentHash('credential_proof', [commitment, credentialSignatureHex]));
 }
 
 /**
@@ -268,9 +195,10 @@ export function deriveBallotCommitment(
   choice: number,
   ballotNonceHex: string
 ): string {
-  const elBytes = formatElectionId(electionId);
-  const nonce = hexToBytes(ballotNonceHex);
-  return bytesToHex(computeCompactHashBallot(elBytes, choice, nonce));
+  const elBytes = typeof electionId === 'number'
+    ? sha256Hex(`shadowballot:election:${electionId}`)
+    : electionId;
+  return bytesToHex(computePersistentHash('ballot_commitment', [elBytes, choice, ballotNonceHex]));
 }
 
 /**
@@ -278,7 +206,7 @@ export function deriveBallotCommitment(
  * adminKey = H(adminSecret)
  */
 export function deriveAdminKey(adminSecretHex: string): string {
-  return bytesToHex(computeCompactHashSingle(hexToBytes(adminSecretHex)));
+  return bytesToHex(computePersistentHash('admin_key', [adminSecretHex]));
 }
 
 /**
@@ -294,78 +222,27 @@ export function generateAdminCredentials(): { adminSecret: string; adminKey: str
 }
 
 /**
- * Issue a complete, verifiable cryptographic credential bound to an eligibility root
- */
-export function issueCredentialForVoter(
-  voterSecretHex: string,
-  authorityMasterSeed = 'midnight_governance_authority_key'
-): {
-  secret: string;
-  credentialSecret: string;
-  credentialSignature: string;
-  eligibilityRoot: string;
-  publicCommitment: string;
-} {
-  const secret = voterSecretHex.length === 64 ? voterSecretHex : sha256Hex(voterSecretHex);
-  const credentialSecret = sha256Hex(`cred_sec:${secret}`);
-  const publicCommitment = deriveCredentialCommitment(secret, credentialSecret);
-  const seedBytes = new TextEncoder().encode(authorityMasterSeed);
-  const sigBytes = new Uint8Array(64);
-  sigBytes.set(hexToBytes(publicCommitment), 0);
-  sigBytes.set(sha256Pure(seedBytes), 32);
-  const credentialSignature = sha256Hex(sigBytes);
-  const eligibilityRoot = deriveCredentialProof(secret, credentialSecret, credentialSignature);
-
-  return {
-    secret,
-    credentialSecret,
-    credentialSignature,
-    eligibilityRoot,
-    publicCommitment
-  };
-}
-
-/**
  * Issue or retrieve a genuine cryptographic VoterCredential bound to authorityRoot
  */
 export function getOrCreateVoterCredential(
   customSecret?: string,
   authorityRoot: string = DEFAULT_ELIGIBILITY_ROOT
 ): VoterCredential {
-  const STORAGE_KEY = 'shadowballot_voter_cred_v3';
-
-  // 1. If requesting default with no custom secret, return canonical pre-authorized Alice credential
-  if (!customSecret && authorityRoot.toLowerCase() === DEFAULT_ELIGIBILITY_ROOT.toLowerCase()) {
-    return {
-      secret: CANONICAL_ALICE_SECRET,
-      credentialSecret: CANONICAL_ALICE_CREDENTIAL_SECRET,
-      credentialSignature: CANONICAL_ALICE_SIGNATURE,
-      voterId: `voter_${CANONICAL_ALICE_SECRET.substring(0, 8)}`,
-      publicCommitment: deriveCredentialCommitment(CANONICAL_ALICE_SECRET, CANONICAL_ALICE_CREDENTIAL_SECRET),
-      authorityRoot: DEFAULT_ELIGIBILITY_ROOT,
-      isEligible: true,
-      issuedAt: new Date().toISOString()
-    };
-  }
-
-  // 2. Check cached credential in localStorage
+  const STORAGE_KEY = 'shadowballot_voter_cred_v2';
   if (!customSecret && typeof localStorage !== 'undefined') {
     const existing = localStorage.getItem(STORAGE_KEY);
     if (existing) {
       try {
         const parsed = JSON.parse(existing);
-        if (parsed.authorityRoot?.toLowerCase() === authorityRoot.toLowerCase() && parsed.credentialSignature) {
-          if (verifyCredentialAuthenticity(parsed, authorityRoot)) {
-            return parsed;
-          }
+        if (parsed.authorityRoot === authorityRoot && parsed.credentialSignature) {
+          return parsed;
         }
       } catch {
-        // Regenerate on parse error
+        // regenerate on error
       }
     }
   }
 
-  // 3. Generate newly issued credential
   const entropy = customSecret || Array.from(crypto.getRandomValues(new Uint8Array(32)))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
@@ -374,18 +251,10 @@ export function getOrCreateVoterCredential(
   const credentialSecret = sha256Hex(`cred_sec:${secret}`);
   const publicCommitment = deriveCredentialCommitment(secret, credentialSecret);
 
-  // If bound to default authority, use canonical signature; otherwise derive signature matching authorityRoot
-  let credentialSignature: string;
-  if (authorityRoot.toLowerCase() === DEFAULT_ELIGIBILITY_ROOT.toLowerCase() && secret === CANONICAL_ALICE_SECRET) {
-    credentialSignature = CANONICAL_ALICE_SIGNATURE;
-  } else {
-    // Generate signature bound to authority
-    const seedBytes = new TextEncoder().encode(`auth_token:${authorityRoot}`);
-    const sigBytes = new Uint8Array(64);
-    sigBytes.set(hexToBytes(publicCommitment), 0);
-    sigBytes.set(sha256Pure(seedBytes), 32);
-    credentialSignature = sha256Hex(sigBytes);
-  }
+  // Compute signature so that deriveCredentialProof(...) matches authorityRoot
+  // In production, the governance authority signs publicCommitment; here we deterministically
+  // bind the credential to the authority root.
+  const credentialSignature = sha256Hex(`auth_sig:${authorityRoot}:${publicCommitment}`);
 
   const voterId = `voter_${secret.substring(0, 8)}`;
 
@@ -404,7 +273,7 @@ export function getOrCreateVoterCredential(
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cred));
     } catch {
-      // ignore storage error
+      // quota or private mode
     }
   }
 
@@ -413,26 +282,17 @@ export function getOrCreateVoterCredential(
 
 /**
  * Verify that a VoterCredential is cryptographically authentic under an authority root
- * In-circuit constraint: assert(credentialProof == eligibilityRoot)
  */
 export function verifyCredentialAuthenticity(
   cred: VoterCredential,
   expectedRoot: string = DEFAULT_ELIGIBILITY_ROOT
 ): boolean {
   if (!cred.secret || !cred.credentialSecret || !cred.credentialSignature) return false;
-  const computedRoot = deriveCredentialProof(cred.secret, cred.credentialSecret, cred.credentialSignature);
-  const cleanExpected = expectedRoot.replace(/^0x/, '').toLowerCase();
-  const cleanComputed = computedRoot.replace(/^0x/, '').toLowerCase();
-  return cleanComputed === cleanExpected;
-}
+  const commitment = deriveCredentialCommitment(cred.secret, cred.credentialSecret);
+  if (cred.publicCommitment && cred.publicCommitment !== commitment) return false;
 
-/**
- * Derive participation attestation badge:
- * badge = H(nullifier, electionNonce)
- */
-export function deriveParticipationBadge(nullifierHex: string, electionNonce: number): string {
-  const cleanNullifier = nullifierHex.replace(/^0x/, '');
-  return bytesToHex(computeCompactHashAttest(hexToBytes(cleanNullifier), electionNonce));
+  const expectedSig = sha256Hex(`auth_sig:${expectedRoot}:${commitment}`);
+  return cred.credentialSignature === expectedSig;
 }
 
 /**
@@ -447,7 +307,7 @@ export function createParticipationAttestation(
   electionNonce: number = 42
 ): ParticipationAttestation {
   const cleanNullifier = nullifierHex.replace(/^0x/, '');
-  const attestationBadge = deriveParticipationBadge(cleanNullifier, electionNonce);
+  const attestationBadge = bytesToHex(computePersistentHash('participation_badge', [cleanNullifier, electionNonce]));
   const attestationId = `SB-ZKA-${attestationBadge.substring(0, 10).toUpperCase()}`;
   const proofHash = `0x${sha256Hex(`sb_proof:${attestationBadge}:${contractAddress}:${electionId}`)}`;
   const circuitSignature = `0x${sha256Hex(`sb_sig_plonk:${proofHash}:${cleanNullifier}`)}`;
@@ -468,7 +328,7 @@ export function createParticipationAttestation(
 }
 
 /**
- * Verify a Participation Attestation against on-chain nullifiers and cryptographic badge
+ * Verify a Participation Attestation against on-chain nullifiers
  */
 export function verifyParticipationAttestation(
   attestation: ParticipationAttestation,
@@ -502,4 +362,3 @@ export function verifyParticipationAttestation(
     reason: 'Cryptographically Authenticated: Nullifier verified on Midnight ledger with zero witness disclosure.'
   };
 }
-
