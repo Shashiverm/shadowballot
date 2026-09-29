@@ -21,26 +21,42 @@ export const ContractInspector: React.FC = () => {
   const [circuitStatuses, setCircuitStatuses] = useState<CircuitVerificationStatus[]>([
     {
       name: 'cast_private_vote',
-      zkirHash: '2fd7eec3b567793f109866a56f5c9ae7882b7f6dc50bbe5cb407425d5217be3b',
-      verifierKeyHash: 'f3c0fb6a4b58e5a2ee30c80506de4fe4d3480073fc29e00d6a1392c1724172ed',
-      proverKeyHash: 'b02716c2c78ebad48aabc6d5e8437914f6400c289d9ab28b0a57ea70d929189e',
-      sizeBytes: 13395,
+      zkirHash: '2f4108b9928e130b9741f3a340b23c3d1b4274ec058ccaf05fe7749b3022a6bf',
+      verifierKeyHash: 'b232665915c6c36c61bc6090e2f349a2fbf0778ed45a1d5e07a1eaf66d2bb34c',
+      proverKeyHash: 'bfa02138abd5039ca41abf583883fd9f07df9c48b0118e2e86b1ca045a4510ec',
+      sizeBytes: 9861,
       isMatched: true
     },
     {
       name: 'close_election',
-      zkirHash: '0b35623736bbe8089a682034b4b983118a095eac0d53f3fe5b0a57995ad3bf41',
-      verifierKeyHash: '4f0ae108d2b21686aad7bcda04c16c248d43352b5f563f08f56912604d7f8dc1',
-      proverKeyHash: '479706349d2263edeabc4b5ed6b0f098a4896f8cb9a242fdcd98f26c50d8e162',
-      sizeBytes: 1003,
+      zkirHash: 'e2f53cd12b79cbe8c3aa4111f8babfe4601933d02d16b046c995f249e9d3a998',
+      verifierKeyHash: '7d16003af1050e2ce4bdfc302a2785f6a8cb3d97fbc216cccf09ece49c12e774',
+      proverKeyHash: '74a495aa25943d812ea204f614a90ef83f600c38eb8873b989027f65fa599dfc',
+      sizeBytes: 3113,
       isMatched: true
     },
     {
       name: 'initialize_election',
-      zkirHash: 'aa2555ffb1102e1255d8c9bd072288bba63873d1a031e838d4b9baec61bc439e',
-      verifierKeyHash: '05d6a4aa9361594f250b22aa6362f31cf80b7d5f56f57b056510c7d19a6a9d01',
-      proverKeyHash: '214d8320dbf1701db860f6afc8cd0ac3849f5ff83aa25c730c28f437e14fc821',
-      sizeBytes: 4330,
+      zkirHash: '4f909f0eb2c14de2b6c2015e6893f2932ce275a45979f4451e77910b2468fab3',
+      verifierKeyHash: 'fb65f934907d06846c4cd4f3444cdc70b0fc70ee48f6014cb8545bb0e8b6ef22',
+      proverKeyHash: '6e766ba5357eb16d3a1d8e475cd6c12aac95bced41ec3861c42b058120d348f3',
+      sizeBytes: 7715,
+      isMatched: true
+    },
+    {
+      name: 'publish_final_results',
+      zkirHash: '277f8cde39b1869bba07c709e2f87c6997919472eccdaf8e87fdc8374e57f876',
+      verifierKeyHash: '3cef98dab9b2b6f3b8b1501add3d29ce71f0f3222001375f5e169558c7d312e8',
+      proverKeyHash: '67dd4a534acce7ed489eccadbe641a8f493ccb8a1cc633db0fdd0bc177cb28c5',
+      sizeBytes: 6922,
+      isMatched: true
+    },
+    {
+      name: 'attest_participation',
+      zkirHash: '59cf43329aac37dbfb379843606d0d7e1e296c17bda9e0356862f6705c5dd4b1',
+      verifierKeyHash: '2a089bdd23ef852506812ab25a85029b567c29897f59386b88f3df9c5a58df4e',
+      proverKeyHash: '8d85e15eac4a7443d487bd538aeb0064b5e043487eb37db0ef3c0867149896f8',
+      sizeBytes: 4648,
       isMatched: true
     }
   ]);
@@ -101,7 +117,7 @@ export const ContractInspector: React.FC = () => {
     const allMatched = updated.every((u) => u.isMatched);
     if (allMatched) {
       setVerificationSummary(
-        `✓ CRYPTOGRAPHIC VERIFICATION PASSED: All 3 ZK circuits (cast_private_vote, close_election, initialize_election) and verifier keys match local compiled bytecode and Midnight ${selectedNetwork.toUpperCase()} on-chain evidence byte-for-byte.`
+        `✓ CRYPTOGRAPHIC VERIFICATION PASSED: All 5 ZK circuits (cast_private_vote, close_election, initialize_election, publish_final_results, attest_participation) and verifier keys match local compiled bytecode and Midnight ${selectedNetwork.toUpperCase()} on-chain evidence byte-for-byte.`
       );
     } else {
       setVerificationSummary('⚠️ Discrepancy detected during circuit hash verification.');

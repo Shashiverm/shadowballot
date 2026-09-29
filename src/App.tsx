@@ -9,7 +9,7 @@ import { WalletModal } from './components/WalletModal';
 import { WalletGate } from './components/WalletGate';
 import { Footer } from './components/Footer';
 import { Election, WalletState, VoterCredential, VoteReceipt, MidnightNetwork } from './lib/types';
-import { INITIAL_ELECTIONS, setMidnightNetwork } from './lib/midnight';
+import { INITIAL_ELECTIONS, setMidnightNetwork, executeCloseElection, executePublishResults } from './lib/midnight';
 import { getOrCreateVoterCredential } from './lib/crypto';
 import { connectInjectedWallet, discoverMidnightWallets } from './lib/wallet';
 
@@ -125,23 +125,20 @@ export const App: React.FC = () => {
     setWallet((prev) => ({ ...prev, network }));
   };
 
-  const handleVoteSuccess = (electionId: number, optionId: number, receipt: VoteReceipt) => {
+  const handleVoteSuccess = (electionId: number, _optionId: number, receipt: VoteReceipt) => {
     setSpentNullifiers((prev) => {
       const next = new Set(prev);
       next.add(receipt.nullifierHash.replace('0x', ''));
       return next;
     });
 
+    // Choice shielding: Only aggregate totalVotes is incremented during voting
     setElections((prev) =>
       prev.map((el) => {
         if (el.id !== electionId) return el;
-        const updatedOptions = el.options.map((opt) =>
-          opt.id === optionId ? { ...opt, voteCount: opt.voteCount + 1 } : opt
-        );
         return {
           ...el,
-          totalVotes: el.totalVotes + 1,
-          options: updatedOptions
+          totalVotes: el.totalVotes + 1
         };
       })
     );
@@ -159,18 +156,71 @@ export const App: React.FC = () => {
     setActiveTab('organizer');
   };
 
-  const handleToggleStatus = (electionId: number) => {
-    setElections((prev) =>
-      prev.map((el) => {
-        if (el.id !== electionId) return el;
-        // Strict Role-Based Permission: Only creator can seal or modify proposal
-        if (wallet.address && el.creatorAddress && el.creatorAddress.toLowerCase() !== wallet.address.toLowerCase()) {
-          alert(`Permission Denied: Only the verified creator (${el.creatorAddress}) has signature authority to modify this proposal.`);
-          return el;
-        }
-        return { ...el, status: el.status === 'active' ? 'closed' : 'active' };
-      })
-    );
+  const handleCloseElection = async (electionId: number) => {
+    const el = elections.find((e) => e.id === electionId);
+    if (!el) return;
+    if (!wallet.isConnected) {
+      alert('Wallet Required: Please connect your administrator wallet.');
+      return;
+    }
+    if (wallet.address && el.creatorAddress && el.creatorAddress.toLowerCase() !== wallet.address.toLowerCase()) {
+      alert(`Permission Denied: Only the verified creator (${el.creatorAddress}) has signature authority to seal this proposal.`);
+      return;
+    }
+    if (el.status !== 'active') {
+      alert('Election is already closed or finalized.');
+      return;
+    }
+
+    const confirmed = window.confirm(`Irreversibly seal ballot box for "${el.title}"? Once closed on Midnight consensus, no further votes can be cast.`);
+    if (!confirmed) return;
+
+    try {
+      await executeCloseElection(wallet, el, el.adminSecret || 'aa'.repeat(32));
+      setElections((prev) =>
+        prev.map((item) =>
+          item.id === electionId ? { ...item, status: 'closed', electionStage: 2 } : item
+        )
+      );
+      alert('Ballot box sealed successfully on Midnight consensus.');
+    } catch (err: any) {
+      alert(`Failed to seal ballot box: ${err?.message || err}`);
+    }
+  };
+
+  const handlePublishResults = async (electionId: number, tallies: [number, number, number, number]) => {
+    const el = elections.find((e) => e.id === electionId);
+    if (!el) return;
+    if (!wallet.isConnected) {
+      alert('Wallet Required: Please connect your administrator wallet.');
+      return;
+    }
+    if (wallet.address && el.creatorAddress && el.creatorAddress.toLowerCase() !== wallet.address.toLowerCase()) {
+      alert(`Permission Denied: Only the verified creator (${el.creatorAddress}) has signature authority to publish finalized tallies.`);
+      return;
+    }
+
+    try {
+      await executePublishResults(wallet, el, el.adminSecret || 'aa'.repeat(32), tallies);
+      setElections((prev) =>
+        prev.map((item) => {
+          if (item.id !== electionId) return item;
+          const updatedOptions = item.options.map((opt, idx) => ({
+            ...opt,
+            voteCount: tallies[idx]
+          }));
+          return {
+            ...item,
+            status: 'finalized',
+            electionStage: 3,
+            options: updatedOptions
+          };
+        })
+      );
+      alert('Finalized results verified and published to Midnight consensus ledger!');
+    } catch (err: any) {
+      alert(`Failed to publish final results: ${err?.message || err}`);
+    }
   };
 
   const totalBallots = elections.reduce((sum, e) => sum + e.totalVotes, 0);
@@ -373,6 +423,7 @@ export const App: React.FC = () => {
               selectedElectionId={selectedElectionId}
               onSelectElection={setSelectedElectionId}
               voterCred={voterCred}
+              spentNullifiers={spentNullifiers}
             />
           ) : (
             <WalletGate
@@ -390,7 +441,8 @@ export const App: React.FC = () => {
             <OrganizerDashboard
               elections={elections}
               onCreateElection={handleCreateElection}
-              onToggleStatus={handleToggleStatus}
+              onCloseElection={handleCloseElection}
+              onPublishResults={handlePublishResults}
               walletAddress={wallet.address}
               wallet={wallet}
             />

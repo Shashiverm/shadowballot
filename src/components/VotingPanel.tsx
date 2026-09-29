@@ -56,8 +56,8 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
       return;
     }
 
-    if (election.status === 'closed') {
-      setErrorMessage('Ballot Box Sealed: This election has closed and no longer accepts submissions.');
+    if (election.status !== 'active') {
+      setErrorMessage('Ballot Box Sealed: This election is not active and no longer accepts submissions.');
       return;
     }
 
@@ -66,6 +66,7 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
     try {
       // Genuine Midnight.js Integration:
       // setNetworkId -> findDeployedContract -> proveTx -> balanceTx -> submitTx -> watchForTxData
+      // Choice is shielded off-chain inside the ZK circuit prover
       const receipt = await executeCastPrivateVote(
         wallet,
         election,
@@ -350,6 +351,15 @@ export const VotingPanel: React.FC<VotingPanelProps> = ({
                   <span>{lastReceipt.nullifierHash}</span>
                 </div>
               </div>
+
+              {lastReceipt.ballotCommitment && (
+                <div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>SHIELDED BALLOT COMMITMENT (Set&lt;Bytes&lt;32&gt;&gt;):</span>
+                  <div className="mono-field" style={{ fontSize: '0.75rem' }}>
+                    <span>{lastReceipt.ballotCommitment}</span>
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
                 <div>

@@ -5,7 +5,8 @@ import { MIDNIGHT_CONFIG, MIDNIGHT_NETWORKS, executeDeployBallotContract } from 
 interface OrganizerDashboardProps {
   elections: Election[];
   onCreateElection: (newElection: Omit<Election, 'id'>) => void;
-  onToggleStatus: (electionId: number) => void;
+  onCloseElection: (electionId: number) => Promise<void>;
+  onPublishResults: (electionId: number, tallies: [number, number, number, number]) => Promise<void>;
   walletAddress: string;
   wallet?: WalletState;
 }
@@ -13,7 +14,8 @@ interface OrganizerDashboardProps {
 export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
   elections,
   onCreateElection,
-  onToggleStatus,
+  onCloseElection,
+  onPublishResults,
   walletAddress,
   wallet
 }) => {
@@ -29,6 +31,12 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
   const [opt3, setOpt3] = useState('');
   const [quorum, setQuorum] = useState('50');
   const [filter, setFilter] = useState<'all' | 'my'>('all');
+
+  // Publish Results Modal State
+  const [publishElectionId, setPublishElectionId] = useState<number | null>(null);
+  const [publishTallies, setPublishTallies] = useState<[string, string, string, string]>(['0', '0', '0', '0']);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   const truncate = (str: string) => {
     if (!str || str.length <= 14) return str;
@@ -76,12 +84,16 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
         description,
         category,
         status: 'active',
+        electionStage: 1,
         totalVotes: 0,
         startDate: new Date().toISOString().split('T')[0],
         endDate: new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
         creatorAddress: walletAddress,
         contractAddress: deployResult.contractAddress,
         quorum: parseInt(quorum) || 50,
+        adminSecret: deployResult.adminSecret,
+        adminKey: deployResult.adminKey,
+        eligibilityRoot: deployResult.eligibilityRoot,
         options: [
           { id: 0, label: opt0, description: 'Option 1 selection', voteCount: 0 },
           { id: 1, label: opt1, description: 'Option 2 selection', voteCount: 0 },
@@ -98,280 +110,243 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
       setOpt2('');
       setOpt3('');
       setIsCreating(false);
-      setFilter('my');
     } catch (err: any) {
-      alert(`Deployment Failed: ${err?.message || 'Error executing deployContract()'}`);
+      alert(`Contract Deployment Failed: ${err?.message || err}`);
     } finally {
       setIsDeploying(false);
       setDeployStep('');
     }
   };
 
+  const handleOpenPublish = (el: Election) => {
+    setPublishElectionId(el.id);
+    setPublishError(null);
+    setPublishTallies([
+      String(el.options[0]?.voteCount || 0),
+      String(el.options[1]?.voteCount || 0),
+      String(el.options[2]?.voteCount || 0),
+      String(el.options[3]?.voteCount || 0)
+    ]);
+  };
+
+  const handleExecutePublish = async () => {
+    if (!publishElectionId) return;
+    const el = elections.find((e) => e.id === publishElectionId);
+    if (!el) return;
+
+    const t0 = parseInt(publishTallies[0]) || 0;
+    const t1 = parseInt(publishTallies[1]) || 0;
+    const t2 = parseInt(publishTallies[2]) || 0;
+    const t3 = parseInt(publishTallies[3]) || 0;
+    const sum = t0 + t1 + t2 + t3;
+
+    if (sum !== el.totalVotes) {
+      setPublishError(`Tally Conservation Error: The sum of option votes (${sum}) must exactly equal the total votes recorded on ledger (${el.totalVotes}).`);
+      return;
+    }
+
+    setIsPublishing(true);
+    setPublishError(null);
+
+    try {
+      await onPublishResults(publishElectionId, [t0, t1, t2, t3]);
+      setPublishElectionId(null);
+    } catch (err: any) {
+      setPublishError(err?.message || 'Failed to publish results to Midnight contract.');
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   return (
     <div className="container" style={{ paddingBottom: '60px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <h2 className="font-display" style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff' }}>
-            Election Organizer Hub
-          </h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            Deploy new zero-knowledge private ballots and manage your authorized elections on Midnight consensus.
-          </p>
-        </div>
-
-        <button
-          className="btn-primary"
-          onClick={() => setIsCreating(!isCreating)}
-        >
-          {isCreating ? 'Cancel Creation' : '+ Create New Election'}
-        </button>
-      </div>
-
-      {/* Connected Organizer Identity & Scope Bar */}
+      {/* Dashboard Top Banner */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        background: 'rgba(139, 92, 246, 0.08)',
-        border: '1px solid rgba(139, 92, 246, 0.25)',
-        borderRadius: '14px',
-        padding: '12px 18px',
-        marginBottom: '24px',
+        marginBottom: '28px',
         flexWrap: 'wrap',
-        gap: '12px'
+        gap: '16px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #7C3AED, #38BDF8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '0.9rem'
-          }}>
-            🛡️
+        <div>
+          <div className="hero-pill" style={{ marginBottom: '8px' }}>
+            <span>🏛️ Election Authority Console</span>
           </div>
-          <div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Connected Organizer Identity & Signature Authority
-            </div>
-            <div className="font-mono" style={{ fontSize: '0.85rem', color: '#ffffff', fontWeight: 600 }}>
-              {walletAddress ? truncate(walletAddress) : 'No Wallet Connected'}
-            </div>
-          </div>
+          <h2 className="font-display" style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ffffff' }}>
+            Governance Administration & Quorum Hub
+          </h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            Deploy verifiable Compact voting contracts, configure eligibility roots, and execute irreversible election lifecycle controls.
+          </p>
         </div>
 
-        {/* Ownership & Scope Filter Tabs */}
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
           <button
-            type="button"
-            className={`btn-ghost ${filter === 'all' ? 'btn-primary' : ''}`}
+            className={`btn-secondary ${filter === 'all' ? 'btn-primary' : ''}`}
             onClick={() => setFilter('all')}
-            style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+            style={{ fontSize: '0.85rem' }}
           >
             All Proposals ({elections.length})
           </button>
           <button
-            type="button"
-            className={`btn-ghost ${filter === 'my' ? 'btn-primary' : ''}`}
+            className={`btn-secondary ${filter === 'my' ? 'btn-primary' : ''}`}
             onClick={() => setFilter('my')}
-            style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+            style={{ fontSize: '0.85rem' }}
           >
-            👑 My Proposals ({myCount})
+            My Admin Proposals ({myCount})
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => setIsCreating(true)}
+            style={{ fontSize: '0.85rem' }}
+          >
+            <span>+ Deploy New Election</span>
           </button>
         </div>
       </div>
 
-      {/* Organizer Responsibilities Workflow Card */}
-      <div style={{
-        background: 'rgba(255, 255, 255, 0.02)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: '16px',
-        padding: '20px',
-        marginBottom: '28px',
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '16px'
-      }}>
-        <div style={{ borderLeft: '3px solid #8B5CF6', paddingLeft: '12px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--violet-light)', textTransform: 'uppercase' }}>Duty 1: Proposal Setup</div>
-          <div style={{ fontSize: '0.82rem', color: '#ffffff', marginTop: '4px' }}>Draft confidential questions, define candidates, and initialize ballot state on Midnight.</div>
-        </div>
-        <div style={{ borderLeft: '3px solid #38BDF8', paddingLeft: '12px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase' }}>Duty 2: Whitelist Root</div>
-          <div style={{ fontSize: '0.82rem', color: '#ffffff', marginTop: '4px' }}>Commit eligible voter Merkle tree root to enable cryptographic eligibility verification.</div>
-        </div>
-        <div style={{ borderLeft: '3px solid #34D399', paddingLeft: '12px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#34d399', textTransform: 'uppercase' }}>Duty 3: Quorum Monitoring</div>
-          <div style={{ fontSize: '0.82rem', color: '#ffffff', marginTop: '4px' }}>Track participation in real-time without ever viewing raw votes or voter identities.</div>
-        </div>
-        <div style={{ borderLeft: '3px solid #F59E0B', paddingLeft: '12px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase' }}>Duty 4: Finalize & Seal</div>
-          <div style={{ fontSize: '0.82rem', color: '#ffffff', marginTop: '4px' }}>Execute close_election.zkir state transition to seal the ballot box and export audit manifests.</div>
-        </div>
-      </div>
-
-      {/* Creation Form Modal / Card */}
+      {/* Creation Modal / Form */}
       {isCreating && (
-        <form
-          onSubmit={handleSubmit}
-          style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-active)',
-            borderRadius: '20px',
-            padding: '32px',
-            marginBottom: '40px',
-            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.4)'
-          }}
-        >
-          <h3 className="font-display" style={{ fontSize: '1.4rem', marginBottom: '20px', color: '#ffffff' }}>
-            New Confidential Ballot Proposal
-          </h3>
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--violet-light)',
+          borderRadius: '20px',
+          padding: '32px',
+          marginBottom: '32px',
+          boxShadow: '0 8px 32px rgba(139, 92, 246, 0.15)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 className="font-display" style={{ fontSize: '1.4rem', color: '#ffffff' }}>
+              Deploy Confidential Election to Midnight Consensus
+            </h3>
+            <button className="btn-ghost" onClick={() => setIsCreating(false)}>✕ Close</button>
+          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px', marginBottom: '16px' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                Election Title
+              <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                PROPOSAL TITLE
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Midnight Community Treasury Allocation 2026"
+                placeholder="e.g. Midnight Developer Priorities Proposal 02"
                 required
                 style={{
                   width: '100%',
-                  background: 'var(--bg-card-subtle)',
+                  background: '#07090e',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: '10px',
-                  padding: '12px 16px',
                   color: '#ffffff',
-                  outline: 'none'
+                  padding: '12px 14px'
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                Category
+              <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                GOVERNANCE CATEGORY
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 style={{
                   width: '100%',
-                  background: 'var(--bg-card-subtle)',
+                  background: '#07090e',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: '10px',
-                  padding: '12px 16px',
                   color: '#ffffff',
-                  outline: 'none'
+                  padding: '12px 14px'
                 }}
               >
                 <option value="Protocol Governance">Protocol Governance</option>
                 <option value="Infrastructure">Infrastructure</option>
-                <option value="Community Treasury">Community Treasury</option>
-                <option value="Core Development">Core Development</option>
+                <option value="Treasury & Grants">Treasury & Grants</option>
+                <option value="Security & Audits">Security & Audits</option>
               </select>
             </div>
-          </div>
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-              Description & Purpose
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Detail the scope of this proposal for community voter review..."
-              rows={3}
-              required
-              style={{
-                width: '100%',
-                background: 'var(--bg-card-subtle)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '10px',
-                padding: '12px 16px',
-                color: '#ffffff',
-                outline: 'none'
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-              Ballot Options (Required: 4 Options for Compact ZK Circuit)
-            </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <input
-                type="text"
-                value={opt0}
-                onChange={(e) => setOpt0(e.target.value)}
-                placeholder="Option 1 label"
+            <div>
+              <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                PROPOSAL DESCRIPTION
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Detailed rationale for this vote..."
+                rows={3}
                 required
                 style={{
-                  background: 'var(--bg-card-subtle)',
+                  width: '100%',
+                  background: '#07090e',
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: '8px',
-                  padding: '10px 14px',
+                  borderRadius: '10px',
                   color: '#ffffff',
-                  outline: 'none'
-                }}
-              />
-              <input
-                type="text"
-                value={opt1}
-                onChange={(e) => setOpt1(e.target.value)}
-                placeholder="Option 2 label"
-                required
-                style={{
-                  background: 'var(--bg-card-subtle)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '8px',
-                  padding: '10px 14px',
-                  color: '#ffffff',
-                  outline: 'none'
-                }}
-              />
-              <input
-                type="text"
-                value={opt2}
-                onChange={(e) => setOpt2(e.target.value)}
-                placeholder="Option 3 label"
-                required
-                style={{
-                  background: 'var(--bg-card-subtle)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '8px',
-                  padding: '10px 14px',
-                  color: '#ffffff',
-                  outline: 'none'
-                }}
-              />
-              <input
-                type="text"
-                value={opt3}
-                onChange={(e) => setOpt3(e.target.value)}
-                placeholder="Option 4 label"
-                required
-                style={{
-                  background: 'var(--bg-card-subtle)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '8px',
-                  padding: '10px 14px',
-                  color: '#ffffff',
-                  outline: 'none'
+                  padding: '12px 14px'
                 }}
               />
             </div>
-          </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  OPTION 0 (INDEX 0)
+                </label>
+                <input
+                  type="text"
+                  value={opt0}
+                  onChange={(e) => setOpt0(e.target.value)}
+                  placeholder="Option 1"
+                  required
+                  style={{ width: '100%', background: '#07090e', border: '1px solid var(--border-subtle)', borderRadius: '10px', color: '#ffffff', padding: '10px' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  OPTION 1 (INDEX 1)
+                </label>
+                <input
+                  type="text"
+                  value={opt1}
+                  onChange={(e) => setOpt1(e.target.value)}
+                  placeholder="Option 2"
+                  required
+                  style={{ width: '100%', background: '#07090e', border: '1px solid var(--border-subtle)', borderRadius: '10px', color: '#ffffff', padding: '10px' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  OPTION 2 (INDEX 2)
+                </label>
+                <input
+                  type="text"
+                  value={opt2}
+                  onChange={(e) => setOpt2(e.target.value)}
+                  placeholder="Option 3"
+                  required
+                  style={{ width: '100%', background: '#07090e', border: '1px solid var(--border-subtle)', borderRadius: '10px', color: '#ffffff', padding: '10px' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  OPTION 3 (INDEX 3)
+                </label>
+                <input
+                  type="text"
+                  value={opt3}
+                  onChange={(e) => setOpt3(e.target.value)}
+                  placeholder="Option 4"
+                  required
+                  style={{ width: '100%', background: '#07090e', border: '1px solid var(--border-subtle)', borderRadius: '10px', color: '#ffffff', padding: '10px' }}
+                />
+              </div>
+            </div>
+
             <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                Quorum Threshold (Minimum Votes)
+              <label style={{ display: 'block', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                QUORUM THRESHOLD (MINIMUM VOTES)
               </label>
               <input
                 type="number"
@@ -379,130 +354,171 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
                 onChange={(e) => setQuorum(e.target.value)}
                 min="1"
                 required
-                style={{
-                  width: '100%',
-                  background: 'var(--bg-card-subtle)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '10px',
-                  padding: '12px 16px',
-                  color: '#ffffff',
-                  outline: 'none'
-                }}
+                style={{ width: '140px', background: '#07090e', border: '1px solid var(--border-subtle)', borderRadius: '10px', color: '#ffffff', padding: '10px' }}
               />
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                Eligible Voter Whitelist Root (Merkle Tree)
-              </label>
-              <input
-                type="text"
-                value="0x7b84c01d9f45610e7a2b91c834e590a21bc9081e4d3a201b5f7e8a91c034b156"
-                disabled
-                style={{
-                  width: '100%',
-                  background: 'rgba(0,0,0,0.3)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '10px',
-                  padding: '12px 16px',
-                  color: 'var(--violet-light)',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '0.78rem'
-                }}
-              />
-            </div>
-          </div>
+            {isDeploying && (
+              <div style={{ color: 'var(--violet-light)', fontSize: '0.88rem', fontWeight: 600 }}>
+                ⏳ {deployStep}
+              </div>
+            )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => setIsCreating(false)}
-              disabled={isDeploying}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={isDeploying}
-            >
-              {isDeploying ? 'Deploying to Midnight...' : `Deploy Ballot to Midnight ${(wallet?.network || 'preprod').toUpperCase()}`}
-            </button>
-          </div>
-        </form>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={isDeploying}
+                style={{ padding: '12px 24px', fontSize: '0.9rem' }}
+              >
+                {isDeploying ? 'Deploying to Midnight...' : 'Confirm & Deploy Contract'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setIsCreating(false)}
+                disabled={isDeploying}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
-      {/* Deployment Progress Modal */}
-      {isDeploying && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ textAlign: 'center', padding: '36px 24px' }}>
-            <div style={{
-              width: '60px',
-              height: '60px',
-              border: '4px solid rgba(139, 92, 246, 0.2)',
-              borderTopColor: 'var(--violet-primary)',
-              borderRadius: '50%',
-              margin: '0 auto 20px',
-              animation: 'spin 0.8s linear infinite'
-            }} />
-            <h3 className="font-display" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
-              Deploying Midnight Contract
+      {/* Publish Results Modal */}
+      {publishElectionId !== null && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--violet-light)',
+            borderRadius: '20px',
+            padding: '32px',
+            maxWidth: '540px',
+            width: '100%'
+          }}>
+            <h3 className="font-display" style={{ fontSize: '1.3rem', color: '#ffffff', marginBottom: '8px' }}>
+              Publish Final Verified Results
             </h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--violet-light)', marginBottom: '16px' }}>
-              {deployStep}
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '20px' }}>
+              The <code>publish_final_results</code> circuit enforces cryptographic conservation: the sum of the 4 option tallies must exactly equal the total votes recorded on-chain.
             </p>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-              Executing <code>deployContract()</code> on Midnight {(wallet?.network || 'preprod').toUpperCase()}
+
+            {publishError && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                color: '#fca5a5',
+                fontSize: '0.82rem',
+                marginBottom: '16px'
+              }}>
+                {publishError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+              {publishTallies.map((val, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '0.85rem', color: '#ffffff' }}>
+                    Option {idx} Tally:
+                  </label>
+                  <input
+                    type="number"
+                    value={val}
+                    onChange={(e) => {
+                      const next = [...publishTallies] as [string, string, string, string];
+                      next[idx] = e.target.value;
+                      setPublishTallies(next);
+                    }}
+                    min="0"
+                    style={{
+                      width: '100px',
+                      background: '#07090e',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '8px',
+                      color: '#ffffff',
+                      padding: '8px',
+                      textAlign: 'right'
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                className="btn-secondary"
+                onClick={() => setPublishElectionId(null)}
+                disabled={isPublishing}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleExecutePublish}
+                disabled={isPublishing}
+              >
+                {isPublishing ? 'Publishing Circuit Proof...' : 'Publish to Ledger'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Active Elections Management List with Ownership & Permissions */}
+      {/* Proposals List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {displayedElections.length === 0 ? (
           <div style={{
             background: 'var(--bg-card)',
-            border: '1px dashed var(--border-subtle)',
+            border: '1px solid var(--border-subtle)',
             borderRadius: '16px',
-            padding: '40px 20px',
+            padding: '40px',
             textAlign: 'center',
             color: 'var(--text-muted)'
           }}>
-            <div style={{ fontSize: '2.2rem', marginBottom: '10px' }}>📭</div>
-            <h4 style={{ color: '#ffffff', marginBottom: '6px', fontSize: '1.1rem' }}>No Proposals Created by Your Wallet Yet</h4>
-            <p style={{ fontSize: '0.84rem', maxWidth: '460px', margin: '0 auto 16px', lineHeight: 1.5 }}>
-              On Midnight, proposals can only be modified or sealed by their verified creator wallet. Click below to deploy your first confidential election.
-            </p>
-            <button className="btn-primary" onClick={() => setIsCreating(true)}>
-              + Create Your First Election
-            </button>
+            No proposals found matching filter.
           </div>
         ) : (
           displayedElections.map((el) => {
             const userOwnsThis = isOwner(el);
+            const isActive = el.status === 'active';
+            const isClosed = el.status === 'closed';
+            const isFinalized = el.status === 'finalized';
+
             return (
               <div
                 key={el.id}
                 style={{
                   background: 'var(--bg-card)',
-                  border: userOwnsThis ? '1px solid rgba(139, 92, 246, 0.4)' : '1px solid var(--border-subtle)',
+                  border: userOwnsThis ? '1px solid rgba(139, 92, 246, 0.35)' : '1px solid var(--border-subtle)',
                   borderRadius: '16px',
                   padding: '24px',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   flexWrap: 'wrap',
-                  gap: '16px',
-                  boxShadow: userOwnsThis ? '0 0 20px rgba(139, 92, 246, 0.08)' : 'none'
+                  gap: '16px'
                 }}
               >
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
                     <span className="category-tag">{el.category}</span>
-                    <span className={`status-pill ${el.status === 'active' ? 'status-active' : 'status-closed'}`}>
-                      {el.status === 'active' ? '● Open for Voting' : '■ Ballot Box Sealed'}
+                    <span className={`status-pill ${isActive ? 'status-active' : 'status-closed'}`}>
+                      {isActive ? '● Open for Voting' : isClosed ? '■ Ballot Box Sealed' : '✓ Results Finalized'}
                     </span>
                     {userOwnsThis ? (
                       <span style={{
@@ -514,7 +530,7 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
                         padding: '3px 8px',
                         borderRadius: '6px'
                       }}>
-                        👑 Created by You (Full Control)
+                        👑 Created by You (Full Admin Authority)
                       </span>
                     ) : (
                       <span style={{
@@ -549,16 +565,18 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
                         title: el.title,
                         category: el.category,
                         status: el.status,
+                        stage: el.electionStage || (isActive ? 1 : isClosed ? 2 : 3),
                         creatorAddress: el.creatorAddress,
+                        adminKey: el.adminKey,
+                        eligibilityRoot: el.eligibilityRoot,
                         totalVerifiedVotes: el.totalVotes,
                         quorumThreshold: el.quorum,
                         quorumAchieved: el.totalVotes >= el.quorum,
                         options: el.options,
                         startDate: el.startDate,
                         endDate: el.endDate,
-                        circuitBytecodeHash: '0x2fd7eec3b567793f109866a56f5c9ae7882b7f6dc50bbe5cb407425d5217be3b',
                         nullifierStorage: 'Set<Bytes<32>>',
-                        merkleStateRoot: '0x7b84c01d9f45610e7a2b91c834e590a21bc9081e4d3a201b5f7e8a91c034b156',
+                        ballotStorage: 'Set<Bytes<32>>',
                         exportedAt: new Date().toISOString()
                       };
                       const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
@@ -575,22 +593,50 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
                   </button>
 
                   {userOwnsThis ? (
-                    <button
-                      className="btn-secondary"
-                      onClick={() => onToggleStatus(el.id)}
-                      style={{
-                        fontSize: '0.82rem',
-                        borderColor: 'rgba(139, 92, 246, 0.4)',
-                        color: el.status === 'active' ? '#f43f5e' : '#34d399'
-                      }}
-                    >
-                      {el.status === 'active' ? '🔒 Seal Ballot Box' : '🔓 Re-open Ballot Box'}
-                    </button>
+                    <>
+                      {isActive && (
+                        <button
+                          className="btn-secondary"
+                          onClick={() => onCloseElection(el.id)}
+                          style={{
+                            fontSize: '0.82rem',
+                            borderColor: 'rgba(244, 63, 94, 0.4)',
+                            color: '#f43f5e'
+                          }}
+                        >
+                          🔒 Irreversibly Seal Ballot Box
+                        </button>
+                      )}
+
+                      {isClosed && (
+                        <button
+                          className="btn-primary"
+                          onClick={() => handleOpenPublish(el)}
+                          style={{ fontSize: '0.82rem' }}
+                        >
+                          📊 Publish Final Verified Results
+                        </button>
+                      )}
+
+                      {isFinalized && (
+                        <span style={{
+                          fontSize: '0.82rem',
+                          color: '#34d399',
+                          fontWeight: 600,
+                          padding: '6px 12px',
+                          background: 'rgba(52, 211, 153, 0.1)',
+                          border: '1px solid rgba(52, 211, 153, 0.3)',
+                          borderRadius: '8px'
+                        }}>
+                          ✓ Results Finalized on Consensus
+                        </span>
+                      )}
+                    </>
                   ) : (
                     <button
                       className="btn-secondary"
                       disabled
-                      title={`Only the creator of this proposal (${el.creatorAddress}) has permission to seal or modify it.`}
+                      title={`Only the creator of this proposal (${el.creatorAddress}) has signature authority.`}
                       style={{
                         fontSize: '0.82rem',
                         opacity: 0.4,
@@ -598,7 +644,7 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
                         background: 'rgba(255, 255, 255, 0.02)'
                       }}
                     >
-                      🔒 Sealed (Creator Only)
+                      🔒 Admin Protected
                     </button>
                   )}
                 </div>

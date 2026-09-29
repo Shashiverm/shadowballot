@@ -12,7 +12,7 @@ export interface Election {
   title: string;
   description: string;
   category: string;
-  status: 'active' | 'closed';
+  status: 'active' | 'closed' | 'finalized';
   options: BallotOption[];
   totalVotes: number;
   startDate: string;
@@ -20,6 +20,10 @@ export interface Election {
   creatorAddress: string;
   contractAddress: string;
   quorum: number;
+  eligibilityRoot?: string;
+  adminKey?: string;
+  adminSecret?: string;
+  electionStage?: number; // 1 = Active, 2 = Closed, 3 = Finalized
 }
 
 export interface WalletState {
@@ -43,16 +47,21 @@ export interface WalletState {
 }
 
 export interface VoterCredential {
-  secret: string;
-  voterId: string;
-  publicCommitment: string;
+  secret: string;              // 32-byte voter secret key
+  credentialSecret: string;    // 32-byte private credential secret
+  credentialSignature: string; // 32-byte issuer signature / auth code
+  voterId: string;             // Public pseudonym
+  publicCommitment: string;    // H(secret + credentialSecret)
+  authorityRoot: string;       // Matches election eligibilityRoot
   isEligible: boolean;
+  issuedAt?: string;
 }
 
 export interface VoteReceipt {
   txId: string;
   txHash: string;
   nullifierHash: string;
+  ballotCommitment?: string;
   electionId: number;
   timestamp: string;
   blockHeight: number;
@@ -62,16 +71,21 @@ export interface VoteReceipt {
   networkId: MidnightNetwork;
   proofTimeMs: number;
   zkCircuit: string;
+  choiceShielded: boolean;
 }
 
 export interface ParticipationAttestation {
   attestationId: string;
   electionId: number;
   electionTitle: string;
+  nullifier: string;
+  attestationBadge: string;
   proofHash: string;
   issuedAt: string;
+  contractAddress: string;
   circuitSignature: string;
   selectiveDisclosureClaim: string;
+  verifiedOnChain: boolean;
 }
 
 export interface CircuitVerificationInfo {

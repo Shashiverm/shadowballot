@@ -1,32 +1,63 @@
 import React, { useState } from 'react';
 import { Election, VoterCredential, ParticipationAttestation } from '../lib/types';
-import { createParticipationAttestation } from '../lib/crypto';
-import { MIDNIGHT_CONFIG } from '../lib/midnight';
+import { createParticipationAttestation, deriveNullifier, verifyParticipationAttestation } from '../lib/crypto';
 
 interface ParticipationProofProps {
   elections: Election[];
   selectedElectionId: number;
   onSelectElection: (id: number) => void;
   voterCred: VoterCredential;
+  spentNullifiers?: Set<string>;
 }
 
 export const ParticipationProof: React.FC<ParticipationProofProps> = ({
   elections,
   selectedElectionId,
   onSelectElection,
-  voterCred
+  voterCred,
+  spentNullifiers = new Set<string>()
 }) => {
   const election = elections.find((e) => e.id === selectedElectionId) || elections[0];
   const [attestation, setAttestation] = useState<ParticipationAttestation | null>(null);
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Verifier State
+  const [auditJsonInput, setAuditJsonInput] = useState('');
+  const [auditResult, setAuditResult] = useState<{ valid: boolean; reason: string } | null>(null);
+
+  const voterNullifier = deriveNullifier(voterCred.secret, election.id);
+  const hasVoted = spentNullifiers.has(voterNullifier) || spentNullifiers.has(`0x${voterNullifier}`);
 
   const handleGenerate = async () => {
+    setErrorMsg(null);
+
+    // Cryptographic rule: Cannot attest participation without a cast ballot
+    if (!hasVoted) {
+      setErrorMsg(
+        'Attestation Rejected: No registered on-chain nullifier found for your credential on this ballot. You must cast a confidential ballot before generating a participation certificate.'
+      );
+      return;
+    }
+
     setIsGenerating(true);
     await new Promise((r) => setTimeout(r, 600));
-    const newAttest = createParticipationAttestation(voterCred.secret, election.id, election.title);
-    setAttestation(newAttest);
-    setIsGenerating(false);
+
+    try {
+      const newAttest = createParticipationAttestation(
+        voterNullifier,
+        election.id,
+        election.title,
+        election.contractAddress,
+        42
+      );
+      setAttestation(newAttest);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to synthesize participation attestation.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleCopyHash = () => {
@@ -46,6 +77,27 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
     a.download = `shadowballot-attestation-${attestation.attestationId.toLowerCase()}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleVerifyCertificate = () => {
+    setAuditResult(null);
+    try {
+      const parsed = JSON.parse(auditJsonInput.trim());
+      if (!parsed.nullifier || !parsed.circuitSignature) {
+        setAuditResult({
+          valid: false,
+          reason: 'Invalid certificate format: Missing nullifier or cryptographic signature.'
+        });
+        return;
+      }
+      const res = verifyParticipationAttestation(parsed, spentNullifiers);
+      setAuditResult(res);
+    } catch {
+      setAuditResult({
+        valid: false,
+        reason: 'JSON Parse Error: Please paste a valid JSON participation certificate.'
+      });
+    }
   };
 
   return (
@@ -71,6 +123,7 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
               onClick={() => {
                 onSelectElection(el.id);
                 setAttestation(null);
+                setErrorMsg(null);
               }}
               className={`btn-secondary ${el.id === election.id ? 'btn-primary' : ''}`}
               style={{ fontSize: '0.85rem' }}
@@ -80,6 +133,20 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
             </button>
           ))}
         </div>
+
+        {errorMsg && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            color: '#fca5a5',
+            fontSize: '0.88rem',
+            marginBottom: '24px'
+          }}>
+            <strong>Authentication Notice:</strong> {errorMsg}
+          </div>
+        )}
 
         {/* Generator Box */}
         {!attestation ? (
@@ -108,9 +175,33 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
             <h3 className="font-display" style={{ fontSize: '1.3rem', color: '#ffffff', marginBottom: '8px' }}>
               Prove Participation in "{election.title}"
             </h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '520px', margin: '0 auto 28px' }}>
-              The local prover will execute <code>attest_participation</code> circuit logic to construct a verifiable ZK signature over the election parameters.
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', maxWidth: '520px', margin: '0 auto 20px' }}>
+              The local enclave evaluates the <code>attest_participation</code> circuit to prove that your derived nullifier was registered in the on-chain Set, without exposing your ballot selection.
             </p>
+
+            <div style={{
+              background: 'rgba(15, 17, 23, 0.6)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '10px',
+              padding: '12px',
+              maxWidth: '520px',
+              margin: '0 auto 24px',
+              fontSize: '0.82rem',
+              textAlign: 'left'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <span style={{ color: 'var(--text-dim)' }}>Ballot Status:</span>
+                <span style={{ color: hasVoted ? '#34d399' : '#f59e0b', fontWeight: 600 }}>
+                  {hasVoted ? '✓ Ballot Cast on Ledger' : '⚠️ No Ballot Submitted Yet'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-dim)' }}>Voter Nullifier:</span>
+                <span className="font-mono" style={{ color: 'var(--violet-light)' }}>
+                  {voterNullifier.substring(0, 10)}...{voterNullifier.substring(54)}
+                </span>
+              </div>
+            </div>
 
             <button
               className="btn-primary"
@@ -129,7 +220,7 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
           /* Attestation Card */
           <div className="attestation-card">
             <div className="attestation-badge">
-              ✓ Cryptographically Verified
+              ✓ Cryptographically Verified on Midnight Ledger
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
@@ -166,6 +257,20 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
               </div>
 
               <div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>REGISTERED NULLIFIER:</span>
+                <div className="mono-field" style={{ fontSize: '0.78rem' }}>
+                  <span>{attestation.nullifier}</span>
+                </div>
+              </div>
+
+              <div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ATTESTATION BADGE (CIRCUIT OUTPUT):</span>
+                <div className="mono-field" style={{ fontSize: '0.78rem' }}>
+                  <span>{attestation.attestationBadge}</span>
+                </div>
+              </div>
+
+              <div>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>PROOF HASH (SELECTIVE DISCLOSURE):</span>
                 <div className="mono-field" style={{ fontSize: '0.78rem' }}>
                   <span>{attestation.proofHash}</span>
@@ -180,7 +285,7 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
               </div>
 
               <div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>CIRCUIT SIGNATURE:</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>DIGITAL CIRCUIT SIGNATURE:</span>
                 <div className="mono-field" style={{ fontSize: '0.78rem' }}>
                   <span>{attestation.circuitSignature}</span>
                 </div>
@@ -231,6 +336,64 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
             </div>
           </div>
         )}
+
+        {/* Third-Party Independent Attestation Auditor Panel */}
+        <div style={{
+          marginTop: '40px',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: '16px',
+          padding: '24px'
+        }}>
+          <h3 className="font-display" style={{ fontSize: '1.15rem', color: '#ffffff', marginBottom: '8px' }}>
+            🔍 Independent Certificate Audit & Verification
+          </h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>
+            Verify any voter's participation certificate against the live on-chain nullifier Set. Paste JSON certificate below to cryptographically authenticate:
+          </p>
+
+          <textarea
+            value={auditJsonInput}
+            onChange={(e) => setAuditJsonInput(e.target.value)}
+            placeholder='Paste {"attestationId": "...", "nullifier": "0x...", "circuitSignature": "0x..."} here...'
+            rows={4}
+            style={{
+              width: '100%',
+              background: '#07090e',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '8px',
+              color: '#ffffff',
+              padding: '10px',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.78rem',
+              marginBottom: '14px',
+              resize: 'vertical'
+            }}
+          />
+
+          <button
+            className="btn-secondary"
+            onClick={handleVerifyCertificate}
+            disabled={!auditJsonInput.trim()}
+            style={{ fontSize: '0.85rem' }}
+          >
+            <span>Verify Certificate Against Ledger Set</span>
+          </button>
+
+          {auditResult && (
+            <div style={{
+              marginTop: '14px',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              background: auditResult.valid ? 'rgba(52, 211, 153, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+              border: `1px solid ${auditResult.valid ? 'rgba(52, 211, 153, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+              color: auditResult.valid ? '#34d399' : '#fca5a5',
+              fontSize: '0.84rem'
+            }}>
+              <strong>{auditResult.valid ? '✓ Authenticated:' : '✗ Audit Failed:'}</strong> {auditResult.reason}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
