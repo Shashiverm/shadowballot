@@ -20,10 +20,18 @@ export const ContractInspector: React.FC = () => {
   const [verificationSummary, setVerificationSummary] = useState<string | null>(null);
   const [circuitStatuses, setCircuitStatuses] = useState<CircuitVerificationStatus[]>([
     {
+      name: 'initialize_election',
+      zkirHash: '4f909f0eb2c14de2b6c2015e6893f2932ce275a45979f4451e77910b2468fab3',
+      verifierKeyHash: 'fb65f934907d06846c4cd4f3444cdc70b0fc70ee48f6014cb8545bb0e8b6ef22',
+      proverKeyHash: '74a495aa25943d812ea204f614a90ef83f600c38eb8873b989027f65fa599dfc',
+      sizeBytes: 7715,
+      isMatched: true
+    },
+    {
       name: 'cast_private_vote',
       zkirHash: '2f4108b9928e130b9741f3a340b23c3d1b4274ec058ccaf05fe7749b3022a6bf',
       verifierKeyHash: 'b232665915c6c36c61bc6090e2f349a2fbf0778ed45a1d5e07a1eaf66d2bb34c',
-      proverKeyHash: 'bfa02138abd5039ca41abf583883fd9f07df9c48b0118e2e86b1ca045a4510ec',
+      proverKeyHash: '8d85e15eac4a7443d487bd538aeb0064b5e043487eb37db0ef3c0867149896f8',
       sizeBytes: 9861,
       isMatched: true
     },
@@ -31,31 +39,31 @@ export const ContractInspector: React.FC = () => {
       name: 'close_election',
       zkirHash: 'e2f53cd12b79cbe8c3aa4111f8babfe4601933d02d16b046c995f249e9d3a998',
       verifierKeyHash: '7d16003af1050e2ce4bdfc302a2785f6a8cb3d97fbc216cccf09ece49c12e774',
-      proverKeyHash: '74a495aa25943d812ea204f614a90ef83f600c38eb8873b989027f65fa599dfc',
+      proverKeyHash: 'bfa02138abd5039ca41abf583883fd9f07df9c48b0118e2e86b1ca045a4510ec',
       sizeBytes: 3113,
       isMatched: true
     },
     {
-      name: 'initialize_election',
-      zkirHash: '4f909f0eb2c14de2b6c2015e6893f2932ce275a45979f4451e77910b2468fab3',
-      verifierKeyHash: 'fb65f934907d06846c4cd4f3444cdc70b0fc70ee48f6014cb8545bb0e8b6ef22',
-      proverKeyHash: '6e766ba5357eb16d3a1d8e475cd6c12aac95bced41ec3861c42b058120d348f3',
-      sizeBytes: 7715,
+      name: 'tally_ballot',
+      zkirHash: '7c0bc39a09ddfc8de772511353de58d283d33c21533f487d42f2fc45599498e4',
+      verifierKeyHash: 'c6afbe21abeb9602fffdfb2d2948b369a1191c7fd2e4181a2ddba5e5c47058ad',
+      proverKeyHash: '6d2cdb74343e79f7279c7b340ca94decc9fc6697bb26ae239139a26b4a62ffa9',
+      sizeBytes: 13934,
       isMatched: true
     },
     {
       name: 'publish_final_results',
-      zkirHash: '277f8cde39b1869bba07c709e2f87c6997919472eccdaf8e87fdc8374e57f876',
-      verifierKeyHash: '3cef98dab9b2b6f3b8b1501add3d29ce71f0f3222001375f5e169558c7d312e8',
-      proverKeyHash: '67dd4a534acce7ed489eccadbe641a8f493ccb8a1cc633db0fdd0bc177cb28c5',
-      sizeBytes: 6922,
+      zkirHash: '23e8912bc05c1a942fb3268d20f8e398856331b353641d1757095c2cd2585306',
+      verifierKeyHash: '2de1daf10fd949569abe42eb73e1a9b959086f80014c6bafe650879962ebf25f',
+      proverKeyHash: '4403e56528f047a4f15e65effd8147f7cabd6217f8e0b0affd46d31ae54bb013',
+      sizeBytes: 7693,
       isMatched: true
     },
     {
       name: 'attest_participation',
       zkirHash: '59cf43329aac37dbfb379843606d0d7e1e296c17bda9e0356862f6705c5dd4b1',
       verifierKeyHash: '2a089bdd23ef852506812ab25a85029b567c29897f59386b88f3df9c5a58df4e',
-      proverKeyHash: '8d85e15eac4a7443d487bd538aeb0064b5e043487eb37db0ef3c0867149896f8',
+      proverKeyHash: '67dd4a534acce7ed489eccadbe641a8f493ccb8a1cc633db0fdd0bc177cb28c5',
       sizeBytes: 4648,
       isMatched: true
     }
@@ -85,7 +93,6 @@ export const ContractInspector: React.FC = () => {
         .map((b) => b.toString(16).padStart(2, '0'))
         .join('');
     } catch {
-      // Fallback: return recorded hash if static server is offline
       return '';
     }
   };
@@ -99,13 +106,13 @@ export const ContractInspector: React.FC = () => {
         const computedZkir = await calculateSha256(`/managed/zkir/${c.name}.zkir`);
         const computedVerifier = await calculateSha256(`/managed/keys/${c.name}.verifier`);
 
-        const zkirValid = !computedZkir || computedZkir.toLowerCase() === c.zkirHash.toLowerCase();
-        const verifierValid = !computedVerifier || computedVerifier.toLowerCase() === c.verifierKeyHash.toLowerCase();
+        const zkirValid = Boolean(computedZkir) && computedZkir.toLowerCase() === c.zkirHash.toLowerCase();
+        const verifierValid = Boolean(computedVerifier) && computedVerifier.toLowerCase() === c.verifierKeyHash.toLowerCase();
 
         return {
           ...c,
-          computedZkirHash: computedZkir || c.zkirHash,
-          computedVerifierKeyHash: computedVerifier || c.verifierKeyHash,
+          computedZkirHash: computedZkir || 'UNVERIFIED (Asset fetch failed)',
+          computedVerifierKeyHash: computedVerifier || 'UNVERIFIED (Asset fetch failed)',
           isMatched: zkirValid && verifierValid
         };
       })
@@ -117,10 +124,10 @@ export const ContractInspector: React.FC = () => {
     const allMatched = updated.every((u) => u.isMatched);
     if (allMatched) {
       setVerificationSummary(
-        `✓ CRYPTOGRAPHIC VERIFICATION PASSED: All 5 ZK circuits (cast_private_vote, close_election, initialize_election, publish_final_results, attest_participation) and verifier keys match local compiled bytecode and Midnight ${selectedNetwork.toUpperCase()} on-chain evidence byte-for-byte.`
+        `✓ CRYPTOGRAPHIC VERIFICATION PASSED: All 6 ZK circuits (initialize_election, cast_private_vote, close_election, tally_ballot, publish_final_results, attest_participation) and verifier keys match local compiled bytecode and Midnight ${selectedNetwork.toUpperCase()} on-chain evidence byte-for-byte.`
       );
     } else {
-      setVerificationSummary('⚠️ Discrepancy detected during circuit hash verification.');
+      setVerificationSummary('⚠️ Discrepancy detected during circuit hash verification: One or more circuit artifacts failed cryptographic hash matching.');
     }
   };
 
@@ -451,7 +458,7 @@ export circuit cast_private_vote(disclosedNullifier: Bytes<32>, optionChoice: Ui
                 {netConfig.proofServerUrl}
               </div>
               <div style={{ color: 'var(--violet-light)', fontSize: '0.72rem', marginTop: '4px' }}>
-                ZK Prover: Client-Side Fallback Active (Halo2)
+                ZK Prover: In-Browser Client Prover (Halo2 / Web Worker)
               </div>
             </div>
 

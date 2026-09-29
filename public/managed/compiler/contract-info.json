@@ -90,34 +90,6 @@
       "pure": false,
       "proof": true,
       "arguments": [
-        {
-          "name": "r0",
-          "type": {
-            "type-name": "Uint",
-            "maxval": 4294967295
-          }
-        },
-        {
-          "name": "r1",
-          "type": {
-            "type-name": "Uint",
-            "maxval": 4294967295
-          }
-        },
-        {
-          "name": "r2",
-          "type": {
-            "type-name": "Uint",
-            "maxval": 4294967295
-          }
-        },
-        {
-          "name": "r3",
-          "type": {
-            "type-name": "Uint",
-            "maxval": 4294967295
-          }
-        }
       ],
       "result-type": {
         "type-name": "Tuple",

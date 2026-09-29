@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Election, VoterCredential, ParticipationAttestation } from '../lib/types';
+import { Election, VoterCredential, ParticipationAttestation, WalletState } from '../lib/types';
 import { createParticipationAttestation, deriveNullifier, verifyParticipationAttestation } from '../lib/crypto';
+import { executeAttestParticipation } from '../lib/midnight';
 
 interface ParticipationProofProps {
   elections: Election[];
@@ -8,6 +9,7 @@ interface ParticipationProofProps {
   onSelectElection: (id: number) => void;
   voterCred: VoterCredential;
   spentNullifiers?: Set<string>;
+  wallet?: WalletState;
 }
 
 export const ParticipationProof: React.FC<ParticipationProofProps> = ({
@@ -15,12 +17,14 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
   selectedElectionId,
   onSelectElection,
   voterCred,
-  spentNullifiers = new Set<string>()
+  spentNullifiers = new Set<string>(),
+  wallet
 }) => {
   const election = elections.find((e) => e.id === selectedElectionId) || elections[0];
   const [attestation, setAttestation] = useState<ParticipationAttestation | null>(null);
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [progressStep, setProgressStep] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Verifier State
@@ -42,21 +46,33 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
     }
 
     setIsGenerating(true);
-    await new Promise((r) => setTimeout(r, 600));
+    setProgressStep('1/4: Checking eligibility credential against election root...');
 
     try {
-      const newAttest = createParticipationAttestation(
-        voterNullifier,
-        election.id,
-        election.title,
-        election.contractAddress,
-        42
-      );
-      setAttestation(newAttest);
+      if (wallet && wallet.isConnected) {
+        const newAttest = await executeAttestParticipation(
+          wallet,
+          election,
+          voterCred,
+          42,
+          (step) => setProgressStep(step)
+        );
+        setAttestation(newAttest);
+      } else {
+        const newAttest = createParticipationAttestation(
+          voterNullifier,
+          election.id,
+          election.title,
+          election.contractAddress,
+          42
+        );
+        setAttestation(newAttest);
+      }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to synthesize participation attestation.');
     } finally {
       setIsGenerating(false);
+      setProgressStep('');
     }
   };
 
@@ -210,7 +226,7 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
               style={{ padding: '14px 28px', fontSize: '0.95rem' }}
             >
               {isGenerating ? (
-                <span>Synthesizing Participation Proof...</span>
+                <span>{progressStep || 'Synthesizing Participation Proof...'}</span>
               ) : (
                 <span>Generate Proof of Participation</span>
               )}

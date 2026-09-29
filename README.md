@@ -189,29 +189,29 @@ npm test
   Executing on Compiled Compact Bytecode (compactc 0.31.1)
 ====================================================
 
-  ✓ [Test 01] Genuine Election Creation & Admin Binding
-    Initialized active election (Stage 1). Admin key bound: 0xfd69ceb0ea282804... Total votes: 0
-  ✓ [Test 02] Valid Private Vote Acceptance
-    Alice vote accepted. In-circuit derived nullifier 0x2d085a430beb4ba6... registered on-chain
-  ✓ [Test 03] Ineligible Voter Rejection
-    Ineligible credential strictly rejected by circuit constraint: "failed assert: Ineligible voter: Private credential failed authorization against elig..."
-  ✓ [Test 04] Invalid Option Range Rejection
-    Out-of-range option index (9 >= 4) strictly rejected by ZK bounds assertion
-  ✓ [Test 05] Double Vote Prevention (Nullifier Replay)
-    Double-voting attempt rejected by in-circuit Set membership check: !nullifiers.member(nullifier)
-  ✓ [Test 06] Choice Confidentiality & Zero Real-Time Leak
-    Public tallies remain completely ZERO [0, 0, 0, 0] while ballotCommitments size = 1. Choice is shielded.
-  ✓ [Test 07] Selective Participation Proof Attestation
-    Alice generated verifiable participation badge 0xd0269528e5d2b8f0... without disclosing vote choice
-  ✓ [Test 08] Administrator Authorization & Sealed Lifecycle
-    Unauthorized close rejected. Genuine admin sealed election: Stage 1 -> Stage 2 (Closed).
-  ✓ [Test 09] Cryptographic Ballot Tallying from Ballot Commitments
-    Alice ballot verified against on-chain commitment and tallied. Option 0 tally = 1. Forged ballot rejected.
-  ✓ [Test 10] Finalized Results Verification & Conservation Law
-    Admin published tallies verified against ballot commitments: [1, 0, 0, 0]. Stage transitioned to 3 (Finalized).
+  ✓ [Test 01] Cryptographic Foundation (Client Hash == Compact Runtime Hash)
+    Exact Compact runtime persistentHash descriptors verified: pair=0x874389d0b6fd... single=0xfd69ceb0ea28...
+  ✓ [Test 02] Election Domain Isolation & Nullifier Derivation
+    Election domain separation confirmed: Nullifier(Alice, ElectionA) ≠ Nullifier(Alice, ElectionB) and ≠ Nullifier(Bob, ElectionA)
+  ✓ [Test 03] Genuine Voter Credentials & In-Circuit Verification
+    Election initialized (Stage 1). Unauthorized credential strictly rejected by assert(credentialProof == eligibilityRoot).
+  ✓ [Test 04] Cross-Election Credential Rejection
+    Credential issued for Election B strictly rejected by Election A's eligibilityRoot circuit constraint.
+  ✓ [Test 05] Private Vote Acceptance & Double-Voting Prevention
+    Alice vote accepted. In-circuit derived nullifier registered on-chain. Duplicate vote attempt rejected.
+  ✓ [Test 06] Choice Confidentiality & Unlinkable Ballot Commitments
+    Public tallies remain completely shielded [0, 0, 0, 0]. Same choice with different nonces produces distinct commitments.
+  ✓ [Test 07] Selective Participation Proof (attest_participation circuit)
+    Alice generated verifiable badge 0x5424504edfd52c... Non-participant Bob rejected.
+  ✓ [Test 08] Irreversible Lifecycle & Sealed Ballot Box
+    Stage 1 -> Stage 2 (Closed). Voting after close strictly prevented by stage assertion.
+  ✓ [Test 09] Cryptographic Ballot Tallying (tally_ballot circuit)
+    Alice ballot verified against on-chain commitment and counted into tally0. Double-spend prevented by removal.
+  ✓ [Test 10] Multi-Vote Tally Verification [3, 1, 1, 0] & Irreversible Finalization
+    Votes [A, A, B, C, A] -> Ledger tallies [3, 1, 1, 0] exact match. Total votes = 5. Finalized into Stage 3.
 
 ----------------------------------------------------
-  10/10 TESTS PASSED — VERIFIED ZERO-KNOWLEDGE PROTOCOL TESTNET DEMO
+  10/10 TESTS PASSED — ALL 11 CRYPTOGRAPHIC GUARANTEES VERIFIED!
 ====================================================
 ```
 

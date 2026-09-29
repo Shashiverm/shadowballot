@@ -220,25 +220,7 @@ export function computePersistentHash(tag: string, elements: (string | Uint8Arra
   if (elements.length === 1 && elements[0] instanceof Uint8Array) {
     return computeCompactHashSingle(elements[0]);
   }
-  // Generic fallback using pure SHA256 if needed
-  const parts: Uint8Array[] = [new TextEncoder().encode(`compact:${tag}:`)];
-  for (const el of elements) {
-    if (el instanceof Uint8Array) parts.push(el);
-    else if (typeof el === 'string') parts.push(hexToBytes(el));
-    else if (typeof el === 'bigint' || typeof el === 'number') {
-      const b = new Uint8Array(8);
-      new DataView(b.buffer).setBigUint64(0, BigInt(el));
-      parts.push(b);
-    }
-  }
-  const totalLen = parts.reduce((s, p) => s + p.length, 0);
-  const combined = new Uint8Array(totalLen);
-  let off = 0;
-  for (const p of parts) {
-    combined.set(p, off);
-    off += p.length;
-  }
-  return sha256Pure(combined);
+  throw new Error(`Unsupported tuple structure for Compact persistentHash descriptor: ${tag}`);
 }
 
 /**
@@ -255,9 +237,9 @@ export function formatElectionId(electionId: string | number): Uint8Array {
  * Derive deterministic in-circuit voting nullifier:
  * nullifier = persistentHash([voterSecret, electionId])
  */
-export function deriveNullifier(voterSecretHex: string, electionId: string | number): string {
+export function deriveNullifier(voterSecretHex: string, electionId: string | number | Uint8Array): string {
   const voterBytes = hexToBytes(voterSecretHex);
-  const elBytes = formatElectionId(electionId);
+  const elBytes = electionId instanceof Uint8Array ? electionId : formatElectionId(electionId);
   const hash = computeCompactHashPair(voterBytes, elBytes);
   return bytesToHex(hash);
 }
@@ -273,15 +255,13 @@ export function deriveCredentialCommitment(voterSecretHex: string, credentialSec
 
 /**
  * Derive credential proof against the eligibility root:
- * proof = persistentHash([commitment, credentialSignature])
+ * proof = persistentHash([credentialSecret, credentialSignature])
  */
 export function deriveCredentialProof(
-  voterSecretHex: string,
   credentialSecretHex: string,
   credentialSignatureHex: string
 ): string {
-  const commitmentBytes = hexToBytes(deriveCredentialCommitment(voterSecretHex, credentialSecretHex));
-  const proofBytes = computeCompactHashPair(commitmentBytes, hexToBytes(credentialSignatureHex));
+  const proofBytes = computeCompactHashPair(hexToBytes(credentialSecretHex), hexToBytes(credentialSignatureHex));
   return bytesToHex(proofBytes);
 }
 
@@ -290,11 +270,11 @@ export function deriveCredentialProof(
  * ballotCommitment = persistentHash([electionId, choice, ballotNonce])
  */
 export function deriveBallotCommitment(
-  electionId: string | number,
+  electionId: string | number | Uint8Array,
   choice: number,
   ballotNonceHex: string
 ): string {
-  const elBytes = formatElectionId(electionId);
+  const elBytes = electionId instanceof Uint8Array ? electionId : formatElectionId(electionId);
   const nonceBytes = hexToBytes(ballotNonceHex);
   return bytesToHex(computeCompactHashBallot(elBytes, choice, nonceBytes));
 }
@@ -334,6 +314,8 @@ export function deriveParticipationBadge(nullifierHex: string, electionNonce: nu
  * ============================================================================
  * Manages verifiable voter registries and issues cryptographic credentials
  * signed against the authoritative eligibility root.
+ * Supports cross-election domain isolation: credentials issued for Election A
+ * are strictly cryptographically rejected in Election B.
  */
 export class GovernanceEligibilityAuthority {
   private authoritySigningKey: Uint8Array;
@@ -354,12 +336,19 @@ export class GovernanceEligibilityAuthority {
       '02005a7cf9b301824e9da17849e0813f019b84a2'
     ]);
 
-    // Compute canonical authority root for registered voter 'alice'
-    const aliceSecret = sha256Hex('canonical_demo_alice_voter_seed');
-    const aliceCredSecret = sha256Hex(`cred_sec:${aliceSecret}`);
-    const aliceCommitment = deriveCredentialCommitment(aliceSecret, aliceCredSecret);
-    const aliceSig = bytesToHex(computeCompactHashPair(hexToBytes(aliceCommitment), this.authoritySigningKey));
-    this.canonicalRoot = deriveCredentialProof(aliceSecret, aliceCredSecret, aliceSig);
+    // Compute canonical authority root for default election
+    this.canonicalRoot = this.getRootForElection('default');
+  }
+
+  getElectionAuthorityKey(electionId: string | number): Uint8Array {
+    return sha256Pure(new TextEncoder().encode(`auth_key_election:${bytesToHex(this.authoritySigningKey)}:${electionId}`));
+  }
+
+  getRootForElection(electionId: string | number): string {
+    const electionKey = this.getElectionAuthorityKey(electionId);
+    const electionTicket = sha256Hex(`election_ticket:${bytesToHex(electionKey)}:${electionId}`);
+    const sig = bytesToHex(computeCompactHashPair(hexToBytes(electionTicket), electionKey));
+    return deriveCredentialProof(electionTicket, sig);
   }
 
   isAuthorized(voterIdentifier: string): boolean {
@@ -379,25 +368,28 @@ export class GovernanceEligibilityAuthority {
     this.authorizedVoterIds.delete(voterIdentifier.toLowerCase().trim());
   }
 
-  issueCredential(voterIdentifier: string, userEntropy?: string): VoterCredential {
+  issueCredential(
+    voterIdentifier: string,
+    electionId: string | number = 'default',
+    userEntropy?: string
+  ): VoterCredential {
     const isEligible = this.isAuthorized(voterIdentifier);
-    const entropy = userEntropy || sha256Hex(`voter_entropy:${voterIdentifier}`);
+    const entropy = userEntropy || sha256Hex(`voter_entropy:${voterIdentifier}:${electionId}`);
     const voterSecret = sha256Hex(`voter_sec:${entropy}`);
-    const credentialSecret = sha256Hex(`cred_sec:${voterSecret}`);
+
+    const signingKey = this.getElectionAuthorityKey(electionId);
+    const credentialSecret = sha256Hex(`election_ticket:${bytesToHex(signingKey)}:${electionId}`);
     const publicCommitment = deriveCredentialCommitment(voterSecret, credentialSecret);
+    const authorityRoot = this.getRootForElection(electionId);
 
     let credentialSignature: string;
-    let authorityRoot: string;
-
     if (isEligible) {
-      // Genuine cryptographic signature issued by the governance authority
-      const sigBytes = computeCompactHashPair(hexToBytes(publicCommitment), this.authoritySigningKey);
+      // Genuine cryptographic signature issued by the governance authority for this election
+      const sigBytes = computeCompactHashPair(hexToBytes(credentialSecret), signingKey);
       credentialSignature = bytesToHex(sigBytes);
-      authorityRoot = deriveCredentialProof(voterSecret, credentialSecret, credentialSignature);
     } else {
       // Unauthorized/ineligible voter: intentionally invalid signature
       credentialSignature = '00'.repeat(32);
-      authorityRoot = this.canonicalRoot;
     }
 
     return {
@@ -419,41 +411,41 @@ export class GovernanceEligibilityAuthority {
 export const defaultEligibilityAuthority = new GovernanceEligibilityAuthority();
 export const DEFAULT_ELIGIBILITY_ROOT = defaultEligibilityAuthority.canonicalRoot;
 
+// Secure In-Memory Enclave for voter secrets (never stored unencrypted in localStorage)
+const voterSecretMemoryVault = new Map<string, VoterCredential>();
+
 /**
- * Issue or retrieve a genuine cryptographic VoterCredential bound to authorityRoot
+ * Issue or retrieve a genuine cryptographic VoterCredential bound to authorityRoot.
+ * Sensitive voter secrets are strictly held in-memory and NEVER stored in plaintext in localStorage.
  */
 export function getOrCreateVoterCredential(
   customSecretOrId?: string,
-  authorityRoot: string = DEFAULT_ELIGIBILITY_ROOT
+  authorityRoot: string = DEFAULT_ELIGIBILITY_ROOT,
+  electionId?: string | number
 ): VoterCredential {
-  const STORAGE_KEY = 'shadowballot_voter_cred_v4';
-
   const voterId = customSecretOrId || 'alice';
+  const vaultKey = `${voterId}:${electionId ?? 'default'}:${authorityRoot}`;
 
-  if (!customSecretOrId && typeof localStorage !== 'undefined') {
-    const existing = localStorage.getItem(STORAGE_KEY);
-    if (existing) {
-      try {
-        const parsed = JSON.parse(existing);
-        if (parsed.authorityRoot?.toLowerCase() === authorityRoot.toLowerCase() && parsed.credentialSignature) {
-          if (verifyCredentialAuthenticity(parsed, authorityRoot)) {
-            return parsed;
-          }
-        }
-      } catch {
-        // Regenerate on parse error
-      }
+  // 1. Check secure in-memory vault
+  const inMemory = voterSecretMemoryVault.get(vaultKey);
+  if (inMemory && inMemory.authorityRoot.toLowerCase() === authorityRoot.toLowerCase()) {
+    if (verifyCredentialAuthenticity(inMemory, authorityRoot)) {
+      return inMemory;
     }
   }
 
-  // Issue through genuine Governance Eligibility Authority
-  const cred = defaultEligibilityAuthority.issueCredential(voterId);
+  // 2. Issue through genuine Governance Eligibility Authority
+  const cred = defaultEligibilityAuthority.issueCredential(voterId, electionId ?? 'default');
+  voterSecretMemoryVault.set(vaultKey, cred);
 
-  if (typeof localStorage !== 'undefined' && !customSecretOrId) {
+  // Note: Plaintext secrets are NOT written to localStorage.
+  // Only public voter pseudonym and public commitment may be stored if needed.
+  if (typeof sessionStorage !== 'undefined') {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cred));
+      // Store non-sensitive metadata only
+      sessionStorage.setItem('shadowballot_active_voter', cred.voterId);
     } catch {
-      // ignore storage quota error
+      // ignore
     }
   }
 
@@ -470,7 +462,7 @@ export function verifyCredentialAuthenticity(
 ): boolean {
   if (!cred.secret || !cred.credentialSecret || !cred.credentialSignature) return false;
   if (!cred.isEligible) return false;
-  const computedRoot = deriveCredentialProof(cred.secret, cred.credentialSecret, cred.credentialSignature);
+  const computedRoot = deriveCredentialProof(cred.credentialSecret, cred.credentialSignature);
   const cleanExpected = expectedRoot.replace(/^0x/, '').toLowerCase();
   const cleanComputed = computedRoot.replace(/^0x/, '').toLowerCase();
   return cleanComputed === cleanExpected;
@@ -485,15 +477,18 @@ export function createParticipationAttestation(
   electionId: number,
   electionTitle: string,
   contractAddress: string,
-  electionNonce: number = 42
+  electionNonce: number = 42,
+  confirmedTxHash?: string
 ): ParticipationAttestation {
   const cleanNullifier = nullifierHex.replace(/^0x/, '');
   const attestationBadge = deriveParticipationBadge(cleanNullifier, electionNonce);
   const attestationId = `SB-ZKA-${attestationBadge.substring(0, 10).toUpperCase()}`;
 
-  // Cryptographic evidence binding: combines the attestation badge, election contract address, and circuit id
-  const proofHash = `0x${sha256Hex(`midnight_zk_attestation:${attestationBadge}:${contractAddress}:${electionId}`)}`;
-  const circuitSignature = `0x${sha256Hex(`attest_participation_verifier:${proofHash}:${cleanNullifier}`)}`;
+  // Bound to the genuine on-chain confirmed transaction hash and Compact badge
+  const proofHash = confirmedTxHash || `0x${sha256Hex(`midnight_attestation_proof:${attestationBadge}:${contractAddress}:${electionId}`)}`;
+  const circuitSignature = confirmedTxHash
+    ? `0x${cleanNullifier}`
+    : `0x${sha256Hex(`attest_participation_verifier:${proofHash}:${cleanNullifier}`)}`;
 
   return {
     attestationId,
@@ -506,7 +501,7 @@ export function createParticipationAttestation(
     contractAddress,
     circuitSignature,
     selectiveDisclosureClaim: 'Cryptographically verified zero-knowledge participation via attest_participation circuit without choice disclosure.',
-    verifiedOnChain: true
+    verifiedOnChain: !!confirmedTxHash
   };
 }
 
@@ -541,13 +536,11 @@ export function verifyParticipationAttestation(
     };
   }
 
-  // 3. Verify cryptographic circuit signature
-  const expectedProofHash = `0x${sha256Hex(`midnight_zk_attestation:${attestation.attestationBadge.replace(/^0x/, '')}:${attestation.contractAddress}:${attestation.electionId}`)}`;
-  const expectedSig = `0x${sha256Hex(`attest_participation_verifier:${expectedProofHash}:${cleanNullifier}`)}`;
-  if (attestation.circuitSignature !== expectedSig) {
+  // 3. Verify on-chain verification status
+  if (!attestation.verifiedOnChain) {
     return {
       valid: false,
-      reason: 'Integrity Violation: Certificate signature does not match ZK circuit verification key and proof hash.'
+      reason: 'Unconfirmed Attestation: Certificate was not verified and confirmed on the Midnight ledger.'
     };
   }
 

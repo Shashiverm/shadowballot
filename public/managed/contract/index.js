@@ -230,7 +230,7 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('close_election',
                                      'argument 1 (as invoked from Typescript)',
-                                     'shadowballot.compact line 115 char 1',
+                                     'shadowballot.compact line 114 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
@@ -255,21 +255,21 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('tally_ballot',
                                      'argument 1 (as invoked from Typescript)',
-                                     'shadowballot.compact line 127 char 1',
+                                     'shadowballot.compact line 126 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(typeof(choice_0) === 'bigint' && choice_0 >= 0n && choice_0 <= 255n)) {
           __compactRuntime.typeError('tally_ballot',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'shadowballot.compact line 127 char 1',
+                                     'shadowballot.compact line 126 char 1',
                                      'Uint<0..256>',
                                      choice_0)
         }
         if (!(ballotNonce_0.buffer instanceof ArrayBuffer && ballotNonce_0.BYTES_PER_ELEMENT === 1 && ballotNonce_0.length === 32)) {
           __compactRuntime.typeError('tally_ballot',
                                      'argument 2 (argument 3 as invoked from Typescript)',
-                                     'shadowballot.compact line 127 char 1',
+                                     'shadowballot.compact line 126 char 1',
                                      'Bytes<32>',
                                      ballotNonce_0)
         }
@@ -291,14 +291,10 @@ export class Contract {
         return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
       },
       publish_final_results: (...args_1) => {
-        if (args_1.length !== 5) {
-          throw new __compactRuntime.CompactError(`publish_final_results: expected 5 arguments (as invoked from Typescript), received ${args_1.length}`);
+        if (args_1.length !== 1) {
+          throw new __compactRuntime.CompactError(`publish_final_results: expected 1 argument (as invoked from Typescript), received ${args_1.length}`);
         }
         const contextOrig_0 = args_1[0];
-        const r0_0 = args_1[1];
-        const r1_0 = args_1[2];
-        const r2_0 = args_1[3];
-        const r3_0 = args_1[4];
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('publish_final_results',
                                      'argument 1 (as invoked from Typescript)',
@@ -306,50 +302,14 @@ export class Contract {
                                      'CircuitContext',
                                      contextOrig_0)
         }
-        if (!(typeof(r0_0) === 'bigint' && r0_0 >= 0n && r0_0 <= 4294967295n)) {
-          __compactRuntime.typeError('publish_final_results',
-                                     'argument 1 (argument 2 as invoked from Typescript)',
-                                     'shadowballot.compact line 156 char 1',
-                                     'Uint<0..4294967296>',
-                                     r0_0)
-        }
-        if (!(typeof(r1_0) === 'bigint' && r1_0 >= 0n && r1_0 <= 4294967295n)) {
-          __compactRuntime.typeError('publish_final_results',
-                                     'argument 2 (argument 3 as invoked from Typescript)',
-                                     'shadowballot.compact line 156 char 1',
-                                     'Uint<0..4294967296>',
-                                     r1_0)
-        }
-        if (!(typeof(r2_0) === 'bigint' && r2_0 >= 0n && r2_0 <= 4294967295n)) {
-          __compactRuntime.typeError('publish_final_results',
-                                     'argument 3 (argument 4 as invoked from Typescript)',
-                                     'shadowballot.compact line 156 char 1',
-                                     'Uint<0..4294967296>',
-                                     r2_0)
-        }
-        if (!(typeof(r3_0) === 'bigint' && r3_0 >= 0n && r3_0 <= 4294967295n)) {
-          __compactRuntime.typeError('publish_final_results',
-                                     'argument 4 (argument 5 as invoked from Typescript)',
-                                     'shadowballot.compact line 156 char 1',
-                                     'Uint<0..4294967296>',
-                                     r3_0)
-        }
         const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
         const partialProofData = {
-          input: {
-            value: _descriptor_0.toValue(r0_0).concat(_descriptor_0.toValue(r1_0).concat(_descriptor_0.toValue(r2_0).concat(_descriptor_0.toValue(r3_0)))),
-            alignment: _descriptor_0.alignment().concat(_descriptor_0.alignment().concat(_descriptor_0.alignment().concat(_descriptor_0.alignment())))
-          },
+          input: { value: [], alignment: [] },
           output: undefined,
           publicTranscript: [],
           privateTranscriptOutputs: []
         };
-        const result_0 = this._publish_final_results_0(context,
-                                                       partialProofData,
-                                                       r0_0,
-                                                       r1_0,
-                                                       r2_0,
-                                                       r3_0);
+        const result_0 = this._publish_final_results_0(context, partialProofData);
         partialProofData.output = { value: [], alignment: [] };
         return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
       },
@@ -362,14 +322,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('attest_participation',
                                      'argument 1 (as invoked from Typescript)',
-                                     'shadowballot.compact line 187 char 1',
+                                     'shadowballot.compact line 176 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(typeof(electionNonce_0) === 'bigint' && electionNonce_0 >= 0n && electionNonce_0 <= 4294967295n)) {
           __compactRuntime.typeError('attest_participation',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'shadowballot.compact line 187 char 1',
+                                     'shadowballot.compact line 176 char 1',
                                      'Uint<0..4294967296>',
                                      electionNonce_0)
         }
@@ -830,9 +790,7 @@ export class Contract {
     const ballotNonce_0 = this._get_ballot_nonce_0(context, partialProofData);
     __compactRuntime.assert(privateChoice_0 < 4n,
                             'Invalid option index: Choice must be 0, 1, 2, or 3');
-    const voterCredentialCommitment_0 = this._persistentHash_2([voterSecret_0,
-                                                                credentialSecret_0]);
-    const credentialProof_0 = this._persistentHash_2([voterCredentialCommitment_0,
+    const credentialProof_0 = this._persistentHash_2([credentialSecret_0,
                                                       credentialSignature_0]);
     __compactRuntime.assert(this._equal_2(credentialProof_0,
                                           _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
@@ -928,7 +886,7 @@ export class Contract {
                                        { ins: { cached: true, n: 1 } }]);
     const tmp_0 = ((t1) => {
                     if (t1 > 4294967295n) {
-                      throw new __compactRuntime.CompactError('shadowballot.compact line 107 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
+                      throw new __compactRuntime.CompactError('shadowballot.compact line 106 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
                     }
                     return t1;
                   })(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
@@ -1068,7 +1026,7 @@ export class Contract {
     if (this._equal_6(verifiedChoice_0, 0n)) {
       const tmp_0 = ((t1) => {
                       if (t1 > 4294967295n) {
-                        throw new __compactRuntime.CompactError('shadowballot.compact line 141 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
+                        throw new __compactRuntime.CompactError('shadowballot.compact line 140 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
                       }
                       return t1;
                     })(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
@@ -1099,7 +1057,7 @@ export class Contract {
       if (this._equal_7(verifiedChoice_0, 1n)) {
         const tmp_1 = ((t1) => {
                         if (t1 > 4294967295n) {
-                          throw new __compactRuntime.CompactError('shadowballot.compact line 143 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
+                          throw new __compactRuntime.CompactError('shadowballot.compact line 142 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
                         }
                         return t1;
                       })(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
@@ -1130,7 +1088,7 @@ export class Contract {
         if (this._equal_8(verifiedChoice_0, 2n)) {
           const tmp_2 = ((t1) => {
                           if (t1 > 4294967295n) {
-                            throw new __compactRuntime.CompactError('shadowballot.compact line 145 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
+                            throw new __compactRuntime.CompactError('shadowballot.compact line 144 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
                           }
                           return t1;
                         })(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
@@ -1160,7 +1118,7 @@ export class Contract {
         } else {
           const tmp_3 = ((t1) => {
                           if (t1 > 4294967295n) {
-                            throw new __compactRuntime.CompactError('shadowballot.compact line 147 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
+                            throw new __compactRuntime.CompactError('shadowballot.compact line 146 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
                           }
                           return t1;
                         })(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
@@ -1192,7 +1150,7 @@ export class Contract {
     }
     return [];
   }
-  _publish_final_results_0(context, partialProofData, r0_0, r1_0, r2_0, r3_0) {
+  _publish_final_results_0(context, partialProofData) {
     __compactRuntime.assert(this._equal_9(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
                                                                                                     partialProofData,
                                                                                                     [
@@ -1241,65 +1199,9 @@ export class Contract {
                                                                                        { popeq: { cached: true,
                                                                                                   result: undefined } }]).value),
                             'Uncounted ballots: All ballot commitments must be tallied before finalization');
-    __compactRuntime.assert(this._equal_11(r0_0,
-                                           _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                                     partialProofData,
-                                                                                                     [
-                                                                                                      { dup: { n: 0 } },
-                                                                                                      { idx: { cached: false,
-                                                                                                               pushPath: false,
-                                                                                                               path: [
-                                                                                                                      { tag: 'value',
-                                                                                                                        value: { value: _descriptor_3.toValue(5n),
-                                                                                                                                 alignment: _descriptor_3.alignment() } }] } },
-                                                                                                      { popeq: { cached: false,
-                                                                                                                 result: undefined } }]).value)),
-                            'Tally mismatch for option 0');
-    __compactRuntime.assert(this._equal_12(r1_0,
-                                           _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                                     partialProofData,
-                                                                                                     [
-                                                                                                      { dup: { n: 0 } },
-                                                                                                      { idx: { cached: false,
-                                                                                                               pushPath: false,
-                                                                                                               path: [
-                                                                                                                      { tag: 'value',
-                                                                                                                        value: { value: _descriptor_3.toValue(6n),
-                                                                                                                                 alignment: _descriptor_3.alignment() } }] } },
-                                                                                                      { popeq: { cached: false,
-                                                                                                                 result: undefined } }]).value)),
-                            'Tally mismatch for option 1');
-    __compactRuntime.assert(this._equal_13(r2_0,
-                                           _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                                     partialProofData,
-                                                                                                     [
-                                                                                                      { dup: { n: 0 } },
-                                                                                                      { idx: { cached: false,
-                                                                                                               pushPath: false,
-                                                                                                               path: [
-                                                                                                                      { tag: 'value',
-                                                                                                                        value: { value: _descriptor_3.toValue(7n),
-                                                                                                                                 alignment: _descriptor_3.alignment() } }] } },
-                                                                                                      { popeq: { cached: false,
-                                                                                                                 result: undefined } }]).value)),
-                            'Tally mismatch for option 2');
-    __compactRuntime.assert(this._equal_14(r3_0,
-                                           _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                                     partialProofData,
-                                                                                                     [
-                                                                                                      { dup: { n: 0 } },
-                                                                                                      { idx: { cached: false,
-                                                                                                               pushPath: false,
-                                                                                                               path: [
-                                                                                                                      { tag: 'value',
-                                                                                                                        value: { value: _descriptor_3.toValue(8n),
-                                                                                                                                 alignment: _descriptor_3.alignment() } }] } },
-                                                                                                      { popeq: { cached: false,
-                                                                                                                 result: undefined } }]).value)),
-                            'Tally mismatch for option 3');
     const sum_0 = ((t1) => {
                     if (t1 > 4294967295n) {
-                      throw new __compactRuntime.CompactError('shadowballot.compact line 176 char 17: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
+                      throw new __compactRuntime.CompactError('shadowballot.compact line 165 char 17: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 4294967295');
                     }
                     return t1;
                   })(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
@@ -1353,7 +1255,7 @@ export class Contract {
                                                                                                            alignment: _descriptor_3.alignment() } }] } },
                                                                                 { popeq: { cached: false,
                                                                                            result: undefined } }]).value));
-    __compactRuntime.assert(this._equal_15(sum_0,
+    __compactRuntime.assert(this._equal_11(sum_0,
                                            _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
                                                                                                      partialProofData,
                                                                                                      [
@@ -1386,11 +1288,9 @@ export class Contract {
                                                              partialProofData);
     const credentialSignature_0 = this._get_credential_signature_0(context,
                                                                    partialProofData);
-    const voterCredentialCommitment_0 = this._persistentHash_2([voterSecret_0,
-                                                                credentialSecret_0]);
-    const credentialProof_0 = this._persistentHash_2([voterCredentialCommitment_0,
+    const credentialProof_0 = this._persistentHash_2([credentialSecret_0,
                                                       credentialSignature_0]);
-    __compactRuntime.assert(this._equal_16(credentialProof_0,
+    __compactRuntime.assert(this._equal_12(credentialProof_0,
                                            _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
                                                                                                      partialProofData,
                                                                                                      [
@@ -1488,22 +1388,6 @@ export class Contract {
     return true;
   }
   _equal_12(x0, y0) {
-    if (x0 !== y0) { return false; }
-    return true;
-  }
-  _equal_13(x0, y0) {
-    if (x0 !== y0) { return false; }
-    return true;
-  }
-  _equal_14(x0, y0) {
-    if (x0 !== y0) { return false; }
-    return true;
-  }
-  _equal_15(x0, y0) {
-    if (x0 !== y0) { return false; }
-    return true;
-  }
-  _equal_16(x0, y0) {
     if (!x0.every((x, i) => y0[i] === x)) { return false; }
     return true;
   }

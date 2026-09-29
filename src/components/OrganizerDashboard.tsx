@@ -6,7 +6,7 @@ interface OrganizerDashboardProps {
   elections: Election[];
   onCreateElection: (newElection: Omit<Election, 'id'>) => void;
   onCloseElection: (electionId: number) => Promise<void>;
-  onPublishResults: (electionId: number, tallies: [number, number, number, number]) => Promise<void>;
+  onPublishResults: (electionId: number, tallies?: [number, number, number, number]) => Promise<void>;
   walletAddress: string;
   wallet?: WalletState;
 }
@@ -134,22 +134,11 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
     const el = elections.find((e) => e.id === publishElectionId);
     if (!el) return;
 
-    const t0 = parseInt(publishTallies[0]) || 0;
-    const t1 = parseInt(publishTallies[1]) || 0;
-    const t2 = parseInt(publishTallies[2]) || 0;
-    const t3 = parseInt(publishTallies[3]) || 0;
-    const sum = t0 + t1 + t2 + t3;
-
-    if (sum !== el.totalVotes) {
-      setPublishError(`Tally Conservation Error: The sum of option votes (${sum}) must exactly equal the total votes recorded on ledger (${el.totalVotes}).`);
-      return;
-    }
-
     setIsPublishing(true);
     setPublishError(null);
 
     try {
-      await onPublishResults(publishElectionId, [t0, t1, t2, t3]);
+      await onPublishResults(publishElectionId);
       setPublishElectionId(null);
     } catch (err: any) {
       setPublishError(err?.message || 'Failed to publish results to Midnight contract.');
@@ -430,34 +419,49 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-              {publishTallies.map((val, idx) => (
-                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '0.85rem', color: '#ffffff' }}>
-                    Option {idx} Tally:
-                  </label>
-                  <input
-                    type="number"
-                    value={val}
-                    onChange={(e) => {
-                      const next = [...publishTallies] as [string, string, string, string];
-                      next[idx] = e.target.value;
-                      setPublishTallies(next);
-                    }}
-                    min="0"
-                    style={{
-                      width: '100px',
-                      background: '#07090e',
+            {(() => {
+              const publishElection = elections.find((e) => e.id === publishElectionId);
+              if (!publishElection) return null;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
+                  <div style={{ color: 'var(--text-dim)', fontSize: '0.78rem', fontWeight: 600, letterSpacing: '0.05em' }}>
+                    ON-CHAIN DERIVED TALLIES (VERIFIED VIA TALLY_BALLOT):
+                  </div>
+                  {publishElection.options.map((opt, idx) => (
+                    <div key={idx} style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 14px',
+                      background: 'rgba(255, 255, 255, 0.03)',
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: '8px',
-                      color: '#ffffff',
-                      padding: '8px',
-                      textAlign: 'right'
-                    }}
-                  />
+                      borderRadius: '10px'
+                    }}>
+                      <span style={{ fontSize: '0.88rem', color: '#ffffff', fontWeight: 500 }}>
+                        Option {idx}: {opt.label}
+                      </span>
+                      <span className="font-mono" style={{ fontSize: '0.9rem', color: 'var(--violet-light)', fontWeight: 600 }}>
+                        {opt.voteCount} votes
+                      </span>
+                    </div>
+                  ))}
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    background: 'rgba(139, 92, 246, 0.08)',
+                    border: '1px solid rgba(139, 92, 246, 0.25)',
+                    borderRadius: '10px',
+                    marginTop: '4px'
+                  }}>
+                    <span style={{ fontSize: '0.88rem', color: '#ffffff', fontWeight: 600 }}>Total Recorded Votes:</span>
+                    <span className="font-mono" style={{ fontSize: '0.95rem', color: '#34d399', fontWeight: 700 }}>
+                      {publishElection.totalVotes}
+                    </span>
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })()}
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button
@@ -472,7 +476,7 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
                 onClick={handleExecutePublish}
                 disabled={isPublishing}
               >
-                {isPublishing ? 'Publishing Circuit Proof...' : 'Publish to Ledger'}
+                {isPublishing ? 'Sealing Finalized Tallies...' : 'Irreversibly Finalize Election'}
               </button>
             </div>
           </div>

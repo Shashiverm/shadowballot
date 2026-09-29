@@ -19,11 +19,7 @@ export type ImpureCircuits<PS> = {
   tally_ballot(context: __compactRuntime.CircuitContext<PS>,
                choice_0: bigint,
                ballotNonce_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
-  publish_final_results(context: __compactRuntime.CircuitContext<PS>,
-                        r0_0: bigint,
-                        r1_0: bigint,
-                        r2_0: bigint,
-                        r3_0: bigint): __compactRuntime.CircuitResults<PS, []>;
+  publish_final_results(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, []>;
   attest_participation(context: __compactRuntime.CircuitContext<PS>,
                        electionNonce_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
 }
@@ -38,11 +34,7 @@ export type ProvableCircuits<PS> = {
   tally_ballot(context: __compactRuntime.CircuitContext<PS>,
                choice_0: bigint,
                ballotNonce_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
-  publish_final_results(context: __compactRuntime.CircuitContext<PS>,
-                        r0_0: bigint,
-                        r1_0: bigint,
-                        r2_0: bigint,
-                        r3_0: bigint): __compactRuntime.CircuitResults<PS, []>;
+  publish_final_results(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, []>;
   attest_participation(context: __compactRuntime.CircuitContext<PS>,
                        electionNonce_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
 }
@@ -60,11 +52,7 @@ export type Circuits<PS> = {
   tally_ballot(context: __compactRuntime.CircuitContext<PS>,
                choice_0: bigint,
                ballotNonce_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
-  publish_final_results(context: __compactRuntime.CircuitContext<PS>,
-                        r0_0: bigint,
-                        r1_0: bigint,
-                        r2_0: bigint,
-                        r3_0: bigint): __compactRuntime.CircuitResults<PS, []>;
+  publish_final_results(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, []>;
   attest_participation(context: __compactRuntime.CircuitContext<PS>,
                        electionNonce_0: bigint): __compactRuntime.CircuitResults<PS, Uint8Array>;
 }

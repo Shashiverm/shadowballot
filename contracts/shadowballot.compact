@@ -86,8 +86,7 @@ export circuit cast_private_vote(): Bytes<32> {
 
     // 4. Cryptographic Voter Eligibility Binding:
     // Assert voter possesses an authentic credential authorized under eligibilityRoot
-    const voterCredentialCommitment = persistentHash<[Bytes<32>, Bytes<32>]>([voterSecret, credentialSecret]);
-    const credentialProof = persistentHash<[Bytes<32>, Bytes<32>]>([voterCredentialCommitment, credentialSignature]);
+    const credentialProof = persistentHash<[Bytes<32>, Bytes<32>]>([credentialSecret, credentialSignature]);
     assert(disclose(credentialProof) == eligibilityRoot, "Ineligible voter: Private credential failed authorization against eligibility root");
 
     // 5. In-Circuit Deterministic Nullifier Derivation:
@@ -149,16 +148,12 @@ export circuit tally_ballot(choice: Uint<8>, ballotNonce: Bytes<32>): [] {
 }
 
 /**
- * Publish and verify aggregate election tallies (administrator only, after election closed).
- * Enforces cryptographic derivation: all ballot commitments MUST be tallied,
- * and the published distribution MUST match the accumulated tallies derived from ballot commitments.
+ * Irreversibly finalize the election results (administrator only, after election closed).
+ * Enforces cryptographic derivation: all ballot commitments MUST have been tallied via tally_ballot,
+ * and the sum of tallies must equal totalVotes.
+ * Admin cannot inject or modify results; finalization only freezes the on-chain accumulated tallies.
  */
-export circuit publish_final_results(
-    r0: Uint<32>,
-    r1: Uint<32>,
-    r2: Uint<32>,
-    r3: Uint<32>
-): [] {
+export circuit publish_final_results(): [] {
     assert(electionStage == 2, "Election must be closed before publishing results");
     const adminSecret = get_admin_secret();
     const computedAdmin = persistentHash<[Bytes<32>]>([adminSecret]);
@@ -166,12 +161,6 @@ export circuit publish_final_results(
 
     // Require all deposited ballot commitments to have been tallied
     assert(ballotCommitments.isEmpty(), "Uncounted ballots: All ballot commitments must be tallied before finalization");
-
-    // Cryptographic verification: published tallies MUST exactly match the tallies derived from ballot commitments
-    assert(disclose(r0) == tally0, "Tally mismatch for option 0");
-    assert(disclose(r1) == tally1, "Tally mismatch for option 1");
-    assert(disclose(r2) == tally2, "Tally mismatch for option 2");
-    assert(disclose(r3) == tally3, "Tally mismatch for option 3");
 
     const sum = (tally0 + tally1 + tally2 + tally3) as Uint<32>;
     assert(sum == totalVotes, "Tally integrity violation: sum of option tallies must equal totalVotes");
@@ -190,8 +179,7 @@ export circuit attest_participation(electionNonce: Uint<32>): Bytes<32> {
     const credentialSignature = get_credential_signature();
 
     // Verify voter eligibility
-    const voterCredentialCommitment = persistentHash<[Bytes<32>, Bytes<32>]>([voterSecret, credentialSecret]);
-    const credentialProof = persistentHash<[Bytes<32>, Bytes<32>]>([voterCredentialCommitment, credentialSignature]);
+    const credentialProof = persistentHash<[Bytes<32>, Bytes<32>]>([credentialSecret, credentialSignature]);
     assert(disclose(credentialProof) == eligibilityRoot, "Ineligible voter credential");
 
     // Derive nullifier and assert voter actually cast a ballot in this election

@@ -188,7 +188,7 @@ export const App: React.FC = () => {
     }
   };
 
-  const handlePublishResults = async (electionId: number, tallies: [number, number, number, number]) => {
+  const handlePublishResults = async (electionId: number, tallies?: [number, number, number, number]) => {
     const el = elections.find((e) => e.id === electionId);
     if (!el) return;
     if (!wallet.isConnected) {
@@ -201,14 +201,14 @@ export const App: React.FC = () => {
     }
 
     try {
-      await executePublishResults(wallet, el, el.adminSecret || 'aa'.repeat(32), tallies);
+      await executePublishResults(wallet, el, el.adminSecret || 'aa'.repeat(32));
       setElections((prev) =>
         prev.map((item) => {
           if (item.id !== electionId) return item;
-          const updatedOptions = item.options.map((opt, idx) => ({
+          const updatedOptions = tallies ? item.options.map((opt, idx) => ({
             ...opt,
             voteCount: tallies[idx]
-          }));
+          })) : item.options;
           return {
             ...item,
             status: 'finalized',
@@ -424,6 +424,7 @@ export const App: React.FC = () => {
               onSelectElection={setSelectedElectionId}
               voterCred={voterCred}
               spentNullifiers={spentNullifiers}
+              wallet={wallet}
             />
           ) : (
             <WalletGate

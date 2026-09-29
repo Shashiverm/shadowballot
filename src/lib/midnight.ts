@@ -1,4 +1,4 @@
-import { Election, MidnightNetwork, VoteReceipt, WalletState, VoterCredential, ContractVerificationEvidence } from './types';
+import { Election, MidnightNetwork, VoteReceipt, WalletState, VoterCredential, ContractVerificationEvidence, ParticipationAttestation } from './types';
 import { setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 export { setNetworkId, getNetworkId };
 
@@ -33,7 +33,8 @@ import {
   sha256Hex,
   DEFAULT_ELIGIBILITY_ROOT,
   generateAdminCredentials,
-  verifyCredentialAuthenticity
+  verifyCredentialAuthenticity,
+  createParticipationAttestation
 } from './crypto';
 import { Observable, Subject } from 'rxjs';
 
@@ -839,41 +840,32 @@ export async function executeTallyBallot(
 }
 
 /**
- * Publish Final Results: Administrator-only verified tally publication
- * Strictly enforces that tally sum matches totalVotes.
+ * Publish Final Results: Administrator-only verified tally publication.
+ * Enforces cryptographic derivation: all ballot commitments MUST have been tallied via tally_ballot.
+ * Freezes the on-chain accumulated tallies into stage 3 (Finalized).
  */
 export async function executePublishResults(
   wallet: WalletState,
   election: Election,
   adminSecretHex: string,
-  tallies: [number, number, number, number],
+  _tallies?: [number, number, number, number],
   onStepProgress?: (step: string) => void
 ): Promise<{ txHash: string; blockHeight: number }> {
   const network = wallet.network;
   setNetworkId(network);
 
-  const sum = tallies.reduce((a, b) => a + b, 0);
-  if (sum !== election.totalVotes) {
-    throw new Error(`Tally conservation violation: Sum of option tallies (${sum}) does not equal totalVotes (${election.totalVotes}).`);
-  }
-
-  onStepProgress?.('1/3: Authenticating administrator secret and verifying tally conservation...');
+  onStepProgress?.('1/3: Authenticating administrator secret and verifying tally completeness...');
   const providers = createMidnightProviders(wallet, network);
   const compiled = createCompiledBallotContract({ adminSecretHex });
 
-  onStepProgress?.('2/3: Publishing finalized tallies via publish_final_results() circuit...');
+  onStepProgress?.('2/3: Executing publish_final_results() circuit to freeze ledger tallies...');
   const contractInstance: any = await (findDeployedContract as any)(providers as any, {
     contractAddress: election.contractAddress,
     compiledContract: compiled,
     privateStateId: `shadowballot_admin_state_${election.id}`
   });
 
-  const txResult = await contractInstance.callTx.publish_final_results(
-    BigInt(tallies[0]),
-    BigInt(tallies[1]),
-    BigInt(tallies[2]),
-    BigInt(tallies[3])
-  );
+  const txResult = await contractInstance.callTx.publish_final_results();
 
   const txId = txResult.public?.txId || txResult.txId;
   if (!txId) {
@@ -895,6 +887,73 @@ export async function executePublishResults(
     txHash,
     blockHeight
   };
+}
+
+/**
+ * Attest Participation: Calls the actual Compact attest_participation circuit.
+ * Generates genuine zero-knowledge proof proving voter nullifier was registered in on-chain Set.
+ * Returns verified ParticipationAttestation with real confirmation receipt.
+ */
+export async function executeAttestParticipation(
+  wallet: WalletState,
+  election: Election,
+  voterCred: VoterCredential,
+  electionNonce: number = 42,
+  onStepProgress?: (step: string) => void
+): Promise<ParticipationAttestation> {
+  const network = wallet.network;
+  setNetworkId(network);
+
+  onStepProgress?.('1/4: Checking eligibility credential against election root...');
+  const expectedRoot = election.eligibilityRoot || DEFAULT_ELIGIBILITY_ROOT;
+  if (!verifyCredentialAuthenticity(voterCred, expectedRoot)) {
+    throw new Error('Credential authentication failed: invalid signature for this election.');
+  }
+
+  onStepProgress?.('2/4: Initializing attest_participation() circuit...');
+  const providers = createMidnightProviders(wallet, network);
+  const compiled = createCompiledBallotContract({
+    voterSecretHex: voterCred.secret,
+    credentialSecretHex: voterCred.credentialSecret,
+    credentialSignatureHex: voterCred.credentialSignature
+  });
+
+  const contractInstance: any = await (findDeployedContract as any)(providers as any, {
+    contractAddress: election.contractAddress,
+    compiledContract: compiled,
+    privateStateId: `shadowballot_attest_${election.id}`
+  });
+
+  onStepProgress?.('3/4: Synthesizing ZK proof for attest_participation()...');
+  const txResult = await contractInstance.callTx.attest_participation(BigInt(electionNonce));
+  const txId = txResult.public?.txId || txResult.txId;
+  if (!txId) {
+    throw new Error('Participation attestation failed: No transaction ID returned from Midnight consensus network.');
+  }
+
+  onStepProgress?.('4/4: Confirming attestation on Midnight consensus...');
+  let blockHeight: number;
+  let txHash = txResult.public?.txHash || `0x${txId}`;
+
+  if (txResult.public?.blockHeight) {
+    blockHeight = txResult.public.blockHeight;
+  } else {
+    const confirmed = await providers.publicDataProvider.watchForTxData(txId);
+    blockHeight = confirmed.blockHeight;
+    txHash = confirmed.txHash;
+  }
+
+  const nullifierHex = deriveNullifier(voterCred.secret, election.id);
+  const attestation = createParticipationAttestation(
+    nullifierHex,
+    election.id,
+    election.title,
+    election.contractAddress,
+    electionNonce,
+    txHash
+  );
+
+  return attestation;
 }
 
 /**
