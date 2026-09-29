@@ -121,8 +121,37 @@ export circuit close_election(): [] {
 }
 
 /**
+ * Cryptographically verify and tally an individual ballot commitment (election must be closed).
+ * Enforces that every tallied vote MUST match an authentic unspent commitment in ballotCommitments.
+ */
+export circuit tally_ballot(choice: Uint<8>, ballotNonce: Bytes<32>): [] {
+    assert(electionStage == 2, "Election must be closed to tally ballots");
+    assert(choice < 4, "Invalid option index: Choice must be 0, 1, 2, or 3");
+
+    const computedBallot = persistentHash<[Bytes<32>, Uint<8>, Bytes<32>]>([electionId, choice, ballotNonce]);
+    const ballotCommitment = disclose(computedBallot);
+    assert(ballotCommitments.member(ballotCommitment), "Ballot commitment not found in registered ballots");
+
+    // Remove commitment to prevent double-counting
+    ballotCommitments.remove(ballotCommitment);
+
+    // Cryptographically increment genuine verified tally
+    const verifiedChoice = disclose(choice);
+    if (verifiedChoice == 0) {
+        tally0 = (tally0 + 1) as Uint<32>;
+    } else if (verifiedChoice == 1) {
+        tally1 = (tally1 + 1) as Uint<32>;
+    } else if (verifiedChoice == 2) {
+        tally2 = (tally2 + 1) as Uint<32>;
+    } else {
+        tally3 = (tally3 + 1) as Uint<32>;
+    }
+}
+
+/**
  * Publish and verify aggregate election tallies (administrator only, after election closed).
- * Enforces cryptographic conservation: sum of tallies MUST equal totalVotes.
+ * Enforces cryptographic derivation: all ballot commitments MUST be tallied,
+ * and the published distribution MUST match the accumulated tallies derived from ballot commitments.
  */
 export circuit publish_final_results(
     r0: Uint<32>,
@@ -135,13 +164,18 @@ export circuit publish_final_results(
     const computedAdmin = persistentHash<[Bytes<32>]>([adminSecret]);
     assert(disclose(computedAdmin) == adminKey, "Unauthorized: Only election administrator can publish results");
 
-    const sum = (disclose(r0) + disclose(r1) + disclose(r2) + disclose(r3)) as Uint<32>;
+    // Require all deposited ballot commitments to have been tallied
+    assert(ballotCommitments.isEmpty(), "Uncounted ballots: All ballot commitments must be tallied before finalization");
+
+    // Cryptographic verification: published tallies MUST exactly match the tallies derived from ballot commitments
+    assert(disclose(r0) == tally0, "Tally mismatch for option 0");
+    assert(disclose(r1) == tally1, "Tally mismatch for option 1");
+    assert(disclose(r2) == tally2, "Tally mismatch for option 2");
+    assert(disclose(r3) == tally3, "Tally mismatch for option 3");
+
+    const sum = (tally0 + tally1 + tally2 + tally3) as Uint<32>;
     assert(sum == totalVotes, "Tally integrity violation: sum of option tallies must equal totalVotes");
 
-    tally0 = disclose(r0);
-    tally1 = disclose(r1);
-    tally2 = disclose(r2);
-    tally3 = disclose(r3);
     electionStage = 3 as Uint<32>; // Finalized
 }
 

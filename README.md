@@ -62,61 +62,41 @@ ShadowBallot is powered by the official **Midnight.js SDK** suite (`@midnight-nt
 
 ---
 
-## 🔒 On-Chain Nullifier Set (`Set<Bytes<32>>`)
+## 🔒 On-Chain Nullifier Set (`Set<Bytes<32>>`) & Choice Shielding
 
-Unlike naive voting contracts that store only a single `lastNullifier` (which fails to prevent double-voting against earlier voters), ShadowBallot implements an **actual cryptographic Set** on the Midnight ledger:
+ShadowBallot implements cryptographic double-vote prevention and ballot choice shielding on the Midnight ledger:
+
+1. **Choice Shielding During Voting**: Raw ballot choices are committed with private randomness (`persistentHash([electionId, privateChoice, ballotNonce])`) and stored in `ballotCommitments: Set<Bytes<32>>`. Individual selections remain completely shielded on-chain during the active voting window.
+2. **Cryptographic Nullifier Set**: Nullifiers are deterministically derived inside the ZK circuit (`persistentHash([voterSecret, electionId])`), checking and inserting into `nullifiers: Set<Bytes<32>>` to prevent double-voting.
+3. **Verifiable Tally Derivation**: When voting is closed, ballots are tallied via `tally_ballot(choice, ballotNonce)`, which cryptographically verifies the ballot opening against `ballotCommitments` before incrementing tallies.
+4. **Finalized Verification & Conservation**: `publish_final_results()` enforces administrator authorization, verifies that all deposited commitments have been tallied (`ballotCommitments.isEmpty()`), and asserts that the published tallies match the cryptographically derived results.
 
 ```compact
-// Public ledger state maintained on Midnight consensus
-export ledger electionActive: Uint<32>;
-export ledger totalVotes: Uint<32>;
-export ledger tally0: Uint<32>;
-export ledger tally1: Uint<32>;
-export ledger tally2: Uint<32>;
-export ledger tally3: Uint<32>;
-export ledger nullifiers: Set<Bytes<32>>;
+// Choice Shielding & Nullifier Registration in cast_private_vote
+const computedNullifier = persistentHash<[Bytes<32>, Bytes<32>]>([voterSecret, electionId]);
+const nullifier = disclose(computedNullifier);
+assert(!nullifiers.member(nullifier), "Duplicate voting prevented");
+nullifiers.insert(nullifier);
 
-export circuit cast_private_vote(disclosedNullifier: Bytes<32>, optionChoice: Uint<8>): [] {
-    assert(electionActive == 1, "Election is currently closed");
-
-    const eligibility = get_voter_eligibility();
-    const privateChoice = get_vote_choice();
-
-    assert(eligibility == 1, "Ineligible voter credential");
-    assert(privateChoice == optionChoice, "Choice mismatch");
-    assert(privateChoice < 4, "Invalid option index");
-
-    // Cryptographic double-vote prevention: Check and register in on-chain Set
-    const nullifierCommitment = disclose(disclosedNullifier);
-    assert(!nullifiers.member(nullifierCommitment), "Nullifier already registered: Duplicate voting prevented");
-    nullifiers.insert(nullifierCommitment);
-
-    // Deliberately disclose only the verified option index for aggregate tallies
-    const verifiedChoice = disclose(optionChoice);
-    if (verifiedChoice == 0) { tally0 = (tally0 + 1) as Uint<32>; }
-    else if (verifiedChoice == 1) { tally1 = (tally1 + 1) as Uint<32>; }
-    else if (verifiedChoice == 2) { tally2 = (tally2 + 1) as Uint<32>; }
-    else { tally3 = (tally3 + 1) as Uint<32>; }
-
-    totalVotes = (totalVotes + 1) as Uint<32>;
-}
+const computedBallot = persistentHash<[Bytes<32>, Uint<8>, Bytes<32>]>([electionId, privateChoice, ballotNonce]);
+ballotCommitments.insert(disclose(computedBallot));
+totalVotes = (totalVotes + 1) as Uint<32>;
 ```
 
 ---
 
-## 🔍 Verifiable Evidence Manifest (Bytecode Identity)
+## 🔍 Protocol Verification & Evidence Manifest
 
-Auditors can verify that the contract deployed on Midnight Preprod/Preview is **100% byte-for-byte identical** to the source code and circuits compiled in this repository:
+The contract circuits and proving keys are compiled directly with the Midnight Compact compiler (`compactc 0.31.1`):
 
 | Artifact | Identifier / SHA-256 Digest | Verification Method |
 | :--- | :--- | :--- |
 | **Network** | Midnight Preprod Testnet | `setNetworkId('preprod')` |
 | **Contract Address** | `02005a7cf9b301824e9da17849e0813f019b84a27c0892015df38902cae148b2` | [Night Scan Explorer](https://explorer.preprod.midnight.network) |
 | **Deployment Tx** | `0x9f81a7b3c40192e8d47b1029c384e9021a8f902738b5c901e7492c10b489a317` | Verified On-Chain Genesis |
-| **Compact Source Hash** | `381e953b430b2c13871b66bb383ce6e4b3ca0b8e80e053c68c0c4031484d8c49` | `Get-FileHash contracts/shadowballot.compact` |
-| **ZKIR Circuit Hash** | `2fd7eec3b567793f109866a56f5c9ae7882b7f6dc50bbe5cb407425d5217be3b` | `Get-FileHash managed/zkir/cast_private_vote.zkir` |
-| **Verifier Key Hash** | `f3c0fb6a4b58e5a2ee30c80506de4fe4d3480073fc29e00d6a1392c1724172ed` | `Get-FileHash managed/keys/cast_private_vote.verifier` |
-| **Bytecode Status** | **100% Matched & Verified** | Live Contract Inspector Verification Audit |
+| **Compact Source** | `contracts/shadowballot.compact` | Midnight Compact v0.23 / 0.31.1 |
+| **Circuits** | 6 Provable Circuits | PLONK / Halo2 ZK-SNARK |
+| **Audit Status** | **Testnet Demo Verified** | Live Contract Inspector & Test Suite Audit |
 
 ---
 
@@ -206,31 +186,32 @@ npm test
 ```text
 ====================================================
   ShadowBallot: Midnight ZK Smart Contract Test Suite
+  Executing on Compiled Compact Bytecode (compactc 0.31.1)
 ====================================================
 
-  ✓ [Test 01] Election Creation
-    Initialized active election with 4 options and zeroed tally counters
-  ✓ [Test 02] Valid Vote Acceptance
-    Alice cast valid vote for Option 0 (Privacy Protocols). Nullifier: 6a09eba2bb682a8d...
+  ✓ [Test 01] Genuine Election Creation & Admin Binding
+    Initialized active election (Stage 1). Admin key bound: 0xfd69ceb0ea282804... Total votes: 0
+  ✓ [Test 02] Valid Private Vote Acceptance
+    Alice vote accepted. In-circuit derived nullifier 0x2d085a430beb4ba6... registered on-chain
   ✓ [Test 03] Ineligible Voter Rejection
-    Ineligible credentials rejected by ZK circuit constraint without leaking identity
+    Ineligible credential strictly rejected by circuit constraint: "failed assert: Ineligible voter: Private credential failed authorization against elig..."
   ✓ [Test 04] Invalid Option Range Rejection
-    Out-of-range option index (choice 9) strictly rejected by bounds assertion
-  ✓ [Test 05] Double Vote Prevention (Nullifier Set Replay)
-    Duplicate voting attempt by Alice rejected: Nullifier 6a09eba2bb682a8d... already registered in on-chain Set (size: 1)
-  ✓ [Test 06] Private Vote Isolation & Nullifier Set Integrity
-    Verified on-chain ledger contains ONLY spent nullifiers Set (1 entry) and aggregate count. Zero witness leakage.
-  ✓ [Test 07] Correct Public Tally
-    Bob voted for Option 2 (Developer Tooling). Ledger tallies: [Option 0: 1, Option 2: 1, Total: 2]
-  ✓ [Test 08] Election Expiry & Closed Ballot Rejection
-    Ballot box closed by admin. Late submission rejected by consensus assertion
-  ✓ [Test 09] Selective Participation Proof Attestation
-    Alice generated verifiable participation badge (0x6a09ec82bb67f79d...) without revealing ballot choice
-  ✓ [Test 10] Multi-Voter Flow & Aggregate Verification
-    5 independent voters cast ballots. Verified tally: [Option 0: 2, Option 1: 1, Option 2: 1, Option 3: 1]. Total: 5
+    Out-of-range option index (9 >= 4) strictly rejected by ZK bounds assertion
+  ✓ [Test 05] Double Vote Prevention (Nullifier Replay)
+    Double-voting attempt rejected by in-circuit Set membership check: !nullifiers.member(nullifier)
+  ✓ [Test 06] Choice Confidentiality & Zero Real-Time Leak
+    Public tallies remain completely ZERO [0, 0, 0, 0] while ballotCommitments size = 1. Choice is shielded.
+  ✓ [Test 07] Selective Participation Proof Attestation
+    Alice generated verifiable participation badge 0xd0269528e5d2b8f0... without disclosing vote choice
+  ✓ [Test 08] Administrator Authorization & Sealed Lifecycle
+    Unauthorized close rejected. Genuine admin sealed election: Stage 1 -> Stage 2 (Closed).
+  ✓ [Test 09] Cryptographic Ballot Tallying from Ballot Commitments
+    Alice ballot verified against on-chain commitment and tallied. Option 0 tally = 1. Forged ballot rejected.
+  ✓ [Test 10] Finalized Results Verification & Conservation Law
+    Admin published tallies verified against ballot commitments: [1, 0, 0, 0]. Stage transitioned to 3 (Finalized).
 
 ----------------------------------------------------
-  10/10 TESTS PASSED — CONTRACT READY FOR PRODUCTION
+  10/10 TESTS PASSED — VERIFIED ZERO-KNOWLEDGE PROTOCOL TESTNET DEMO
 ====================================================
 ```
 

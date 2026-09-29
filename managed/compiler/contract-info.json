@@ -60,6 +60,32 @@
       }
     },
     {
+      "name": "tally_ballot",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "choice",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 255
+          }
+        },
+        {
+          "name": "ballotNonce",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
       "name": "publish_final_results",
       "pure": false,
       "proof": true,

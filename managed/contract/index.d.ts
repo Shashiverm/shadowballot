@@ -16,6 +16,9 @@ export type ImpureCircuits<PS> = {
                       adminCommitment_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
   cast_private_vote(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, Uint8Array>;
   close_election(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, []>;
+  tally_ballot(context: __compactRuntime.CircuitContext<PS>,
+               choice_0: bigint,
+               ballotNonce_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
   publish_final_results(context: __compactRuntime.CircuitContext<PS>,
                         r0_0: bigint,
                         r1_0: bigint,
@@ -32,6 +35,9 @@ export type ProvableCircuits<PS> = {
                       adminCommitment_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
   cast_private_vote(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, Uint8Array>;
   close_election(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, []>;
+  tally_ballot(context: __compactRuntime.CircuitContext<PS>,
+               choice_0: bigint,
+               ballotNonce_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
   publish_final_results(context: __compactRuntime.CircuitContext<PS>,
                         r0_0: bigint,
                         r1_0: bigint,
@@ -51,6 +57,9 @@ export type Circuits<PS> = {
                       adminCommitment_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
   cast_private_vote(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, Uint8Array>;
   close_election(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, []>;
+  tally_ballot(context: __compactRuntime.CircuitContext<PS>,
+               choice_0: bigint,
+               ballotNonce_0: Uint8Array): __compactRuntime.CircuitResults<PS, []>;
   publish_final_results(context: __compactRuntime.CircuitContext<PS>,
                         r0_0: bigint,
                         r1_0: bigint,

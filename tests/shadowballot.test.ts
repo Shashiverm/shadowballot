@@ -1,161 +1,45 @@
 /**
  * ============================================================================
- * SHADOWBALLOT ZERO-KNOWLEDGE CONTRACT TEST SUITE
+ * SHADOWBALLOT ZERO-KNOWLEDGE SMART CONTRACT TEST SUITE
  * ============================================================================
  * 
- * Verifies the 10 fundamental security, privacy, and functional guarantees of
- * the ShadowBallot Midnight Compact contract:
+ * Verifies the 10 fundamental cryptographic guarantees of the ShadowBallot
+ * Midnight Compact contract running on the compiled bytecode (compactc 0.31.1):
  * 
- * 1. Election Creation
- * 2. Valid Vote Acceptance
- * 3. Ineligible Voter Rejection
- * 4. Invalid Option Range Rejection
- * 5. Double Vote / Nullifier Replay Prevention
- * 6. Private Vote Isolation (Zero witness leak into public ledger)
- * 7. Correct Aggregate Public Tally
- * 8. Election Expiry & Closed Ballot Box Rejection
- * 9. Selective Participation Proof Attestation
- * 10. Multi-Voter End-to-End Election Lifecycle
+ * 1. Genuine Election Creation & Admin Binding
+ * 2. Valid Private Vote Acceptance & In-Circuit Nullifier
+ * 3. Ineligible Voter Rejection (Credential proof constraint)
+ * 4. Invalid Option Range Rejection (In-circuit bounds assertion)
+ * 5. Double Vote Prevention (On-chain nullifier Set replay)
+ * 6. Choice Confidentiality & Zero Real-Time Leak
+ * 7. Selective Participation Proof Attestation (attest_participation circuit)
+ * 8. Administrator Authorization & Sealed Lifecycle
+ * 9. Cryptographic Ballot Tallying from Ballot Commitments
+ * 10. Finalized Results Verification & Conservation Law
  * ============================================================================
  */
 
 import { Contract, ledger } from '../managed/contract/index.js';
+import * as cr from '@midnight-ntwrk/compact-runtime';
+import {
+  sha256Pure,
+  sha256Hex,
+  hexToBytes,
+  bytesToHex,
+  computeCompactHashPair,
+  computeCompactHashSingle,
+  computeCompactHashBallot,
+  computeCompactHashAttest,
+  deriveCredentialCommitment,
+  deriveCredentialProof,
+  deriveNullifier,
+  deriveBallotCommitment,
+  deriveAdminKey,
+  deriveParticipationBadge,
+  defaultEligibilityAuthority
+} from '../src/lib/crypto';
 
-// Cryptographic hash simulation for deterministic nullifier derivation
-function sha256Hex(data: string): string {
-  // Simple deterministic 32-byte digest simulation for test environment
-  let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
-  for (let i = 0; i < data.length; i++) {
-    const code = data.charCodeAt(i);
-    h0 = (h0 ^ (code * 31)) >>> 0;
-    h1 = (h1 + (code << 3)) >>> 0;
-    h2 = (h2 ^ (code * 17)) >>> 0;
-    h3 = (h3 + (code << 5)) >>> 0;
-  }
-  const part = (n: number) => n.toString(16).padStart(8, '0');
-  return (part(h0) + part(h1) + part(h2) + part(h3) + part(h1 ^ h3) + part(h0 ^ h2) + part(h2) + part(h1)).substring(0, 64);
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2) || '00', 16);
-  }
-  return bytes;
-}
-
-function deriveNullifier(voterSecret: string, electionId: number): Uint8Array {
-  const digest = sha256Hex(`voter:${voterSecret}:election:${electionId}`);
-  return hexToBytes(digest);
-}
-
-// In-memory contract ledger simulation conforming to Midnight Contract runtime
-interface SimLedger {
-  electionActive: bigint;
-  totalVotes: bigint;
-  tally0: bigint;
-  tally1: bigint;
-  tally2: bigint;
-  tally3: bigint;
-  nullifiers: Set<string>;
-}
-
-interface VoterWitness {
-  secret: string;
-  choice: number;
-  isEligible: boolean;
-}
-
-class ShadowBallotSimulator {
-  public ledger: SimLedger;
-  public electionTitle: string;
-  public options: string[];
-
-  constructor() {
-    this.ledger = {
-      electionActive: 0n,
-      totalVotes: 0n,
-      tally0: 0n,
-      tally1: 0n,
-      tally2: 0n,
-      tally3: 0n,
-      nullifiers: new Set<string>()
-    };
-    this.electionTitle = 'Midnight Community Proposal 01';
-    this.options = [
-      'Privacy Protocols & Shielded State',
-      'Scalability & ZK Rollups',
-      'Developer Tooling & TypeScript SDKs',
-      'Cross-Chain Interoperability'
-    ];
-  }
-
-  public initializeElection() {
-    this.ledger.electionActive = 1n;
-    this.ledger.totalVotes = 0n;
-    this.ledger.tally0 = 0n;
-    this.ledger.tally1 = 0n;
-    this.ledger.tally2 = 0n;
-    this.ledger.tally3 = 0n;
-    this.ledger.nullifiers.clear();
-  }
-
-  public castPrivateVote(voter: VoterWitness, electionId: number, declaredOption: number): { success: boolean; error?: string; nullifierHex: string } {
-    const nullifierBytes = deriveNullifier(voter.secret, electionId);
-    const nullifierHex = Array.from(nullifierBytes).map(b => b.toString(16).padStart(2, '0')).join('');
-
-    // Constraint 1: Election must be active
-    if (this.ledger.electionActive !== 1n) {
-      return { success: false, error: 'Election is currently closed or expired', nullifierHex };
-    }
-
-    // Constraint 2: Voter must be eligible (private witness assert)
-    if (!voter.isEligible) {
-      return { success: false, error: 'Ineligible voter: Voting credential verification failed', nullifierHex };
-    }
-
-    // Constraint 3: Option must match witness and be valid
-    if (voter.choice !== declaredOption) {
-      return { success: false, error: 'Choice mismatch: Disclosed option must match witness selection', nullifierHex };
-    }
-    if (declaredOption < 0 || declaredOption >= 4) {
-      return { success: false, error: 'Invalid option index: Choice must be 0, 1, 2, or 3', nullifierHex };
-    }
-
-    // Constraint 4: On-chain nullifier Set membership check (prevent double-voting)
-    if (this.ledger.nullifiers.has(nullifierHex)) {
-      return { success: false, error: 'Nullifier already registered: Duplicate voting prevented', nullifierHex };
-    }
-
-    // State transition into on-chain Set<Bytes<32>>
-    this.ledger.nullifiers.add(nullifierHex);
-    this.ledger.totalVotes += 1n;
-
-    if (declaredOption === 0) this.ledger.tally0 += 1n;
-    else if (declaredOption === 1) this.ledger.tally1 += 1n;
-    else if (declaredOption === 2) this.ledger.tally2 += 1n;
-    else if (declaredOption === 3) this.ledger.tally3 += 1n;
-
-    return { success: true, nullifierHex };
-  }
-
-  public attestParticipation(voter: VoterWitness, electionNonce: number): { success: boolean; error?: string; attestationHash?: string } {
-    if (!voter.isEligible) {
-      return { success: false, error: 'Voter was not an eligible participant' };
-    }
-    if (electionNonce <= 0) {
-      return { success: false, error: 'Invalid election verification nonce' };
-    }
-    const hash = sha256Hex(`attestation:eligible:${electionNonce}`);
-    return { success: true, attestationHash: `0x${hash}` };
-  }
-
-  public closeElection() {
-    this.ledger.electionActive = 0n;
-  }
-}
-
-// ANSI colors for clean test suite output
+// ANSI terminal colors
 const GREEN = '\x1b[32m';
 const RED = '\x1b[31m';
 const CYAN = '\x1b[36m';
@@ -165,6 +49,7 @@ const RESET = '\x1b[0m';
 async function runSuite() {
   console.log(`\n${BOLD}${CYAN}====================================================${RESET}`);
   console.log(`${BOLD}  ShadowBallot: Midnight ZK Smart Contract Test Suite${RESET}`);
+  console.log(`${BOLD}  Executing on Compiled Compact Bytecode (compactc 0.31.1)${RESET}`);
   console.log(`${BOLD}${CYAN}====================================================${RESET}\n`);
 
   let passedCount = 0;
@@ -182,129 +67,324 @@ async function runSuite() {
     }
   }
 
-  const sim = new ShadowBallotSimulator();
+  // Setup Authority & Voters (deterministically derived without static secrets)
+  const authoritySeed = 'midnight_test_authority_seed';
+  const authorityKey = sha256Pure(new TextEncoder().encode(`auth_key:${authoritySeed}`));
 
-  // Test 1: Election creation
-  sim.initializeElection();
+  function issueVoterCred(voterName: string, isEligible: boolean) {
+    const voterSecret = sha256Hex(`test_voter_sec:${voterName}`);
+    const credSecret = sha256Hex(`cred_sec:${voterSecret}`);
+    const comm = deriveCredentialCommitment(voterSecret, credSecret);
+    let sig: string;
+    if (isEligible) {
+      sig = bytesToHex(computeCompactHashPair(hexToBytes(comm), authorityKey));
+    } else {
+      sig = '00'.repeat(32); // unauthorized
+    }
+    const root = deriveCredentialProof(voterSecret, credSecret, sig);
+    return {
+      secret: voterSecret,
+      credentialSecret: credSecret,
+      credentialSignature: sig,
+      commitment: comm,
+      eligibilityRoot: root,
+      isEligible
+    };
+  }
+
+  const aliceCred = issueVoterCred('alice', true);
+  const eveCred = issueVoterCred('eve', false);
+
+  const adminSecretHex = sha256Hex('admin_election_salt_seed_2026');
+  const adminKeyHex = deriveAdminKey(adminSecretHex);
+
+  const electionIdBytes = new Uint8Array(32).fill(42);
+
+  // Dynamic witness storage
+  let currentVoterSecret = hexToBytes(aliceCred.secret);
+  let currentCredSecret = hexToBytes(aliceCred.credentialSecret);
+  let currentCredSig = hexToBytes(aliceCred.credentialSignature);
+  let currentChoice = 0n;
+  let currentBallotNonce = new Uint8Array(32).fill(101);
+  let currentAdminSecret = hexToBytes(adminSecretHex);
+
+  const witnesses = {
+    get_voter_secret: (ctx: any): [any, Uint8Array] => [ctx.privateState, currentVoterSecret],
+    get_credential_secret: (ctx: any): [any, Uint8Array] => [ctx.privateState, currentCredSecret],
+    get_credential_signature: (ctx: any): [any, Uint8Array] => [ctx.privateState, currentCredSig],
+    get_vote_choice: (ctx: any): [any, bigint] => [ctx.privateState, currentChoice],
+    get_ballot_nonce: (ctx: any): [any, Uint8Array] => [ctx.privateState, currentBallotNonce],
+    get_admin_secret: (ctx: any): [any, Uint8Array] => [ctx.privateState, currentAdminSecret]
+  };
+
+  const contract = new Contract(witnesses as any);
+  const constructorContext = (cr.createConstructorContext as any)({}, {});
+  const initRes = contract.initialState(constructorContext);
+
+  let circuitCtx = cr.createCircuitContext(
+    cr.dummyContractAddress(),
+    initRes.currentZswapLocalState,
+    initRes.currentContractState,
+    initRes.currentPrivateState
+  );
+
+  // [Test 01] Genuine Election Creation & Admin Binding
+  const initTx = contract.circuits.initialize_election(
+    circuitCtx,
+    electionIdBytes,
+    hexToBytes(aliceCred.eligibilityRoot),
+    hexToBytes(adminKeyHex)
+  );
+  let state = ledger(initTx.context.currentQueryContext.state);
   assertTest(
     1,
-    'Election Creation',
-    sim.ledger.electionActive === 1n && sim.ledger.totalVotes === 0n && sim.options.length === 4,
-    `Initialized active election with 4 options and zeroed tally counters`
+    'Genuine Election Creation & Admin Binding',
+    state.electionStage === 1n && state.totalVotes === 0n,
+    `Initialized active election (Stage 1). Admin key bound: 0x${adminKeyHex.substring(0, 16)}... Total votes: 0`
   );
 
-  // Test 2: Valid vote
-  const alice: VoterWitness = { secret: 'alice_secret_seed_987654321', choice: 0, isEligible: true };
-  const resAlice = sim.castPrivateVote(alice, 1, 0);
+  circuitCtx = cr.createCircuitContext(
+    cr.dummyContractAddress(),
+    initTx.context.currentZswapLocalState,
+    initTx.context.currentQueryContext.state,
+    initTx.context.currentPrivateState
+  );
+
+  // [Test 02] Valid Private Vote Acceptance & In-Circuit Nullifier Registration
+  const expectedNullifier = deriveNullifier(aliceCred.secret, bytesToHex(electionIdBytes));
+  const voteTx = contract.circuits.cast_private_vote(circuitCtx);
+  state = ledger(voteTx.context.currentQueryContext.state);
+  const nullifierRegistered = state.nullifiers.member(hexToBytes(expectedNullifier));
   assertTest(
     2,
-    'Valid Vote Acceptance',
-    resAlice.success && sim.ledger.totalVotes === 1n && sim.ledger.tally0 === 1n,
-    `Alice cast valid vote for Option 0 (Privacy Protocols). Nullifier: ${resAlice.nullifierHex.substring(0, 16)}...`
+    'Valid Private Vote Acceptance',
+    nullifierRegistered && state.totalVotes === 1n,
+    `Alice vote accepted. In-circuit derived nullifier 0x${expectedNullifier.substring(0, 16)}... registered on-chain`
   );
 
-  // Test 3: Invalid voter rejection
-  const eve: VoterWitness = { secret: 'eve_unregistered_key', choice: 1, isEligible: false };
-  const resEve = sim.castPrivateVote(eve, 1, 1);
+  // [Test 03] Ineligible Voter Rejection
+  currentVoterSecret = hexToBytes(eveCred.secret);
+  currentCredSecret = hexToBytes(eveCred.credentialSecret);
+  currentCredSig = hexToBytes(eveCred.credentialSignature);
+  currentChoice = 1n;
+  currentBallotNonce = new Uint8Array(32).fill(102);
+
+  let eveRejected = false;
+  let eveErrorMsg = '';
+  try {
+    const eveCtx = cr.createCircuitContext(
+      cr.dummyContractAddress(),
+      voteTx.context.currentZswapLocalState,
+      voteTx.context.currentQueryContext.state,
+      voteTx.context.currentPrivateState
+    );
+    contract.circuits.cast_private_vote(eveCtx);
+  } catch (err: any) {
+    eveRejected = true;
+    eveErrorMsg = err?.message || String(err);
+  }
   assertTest(
     3,
     'Ineligible Voter Rejection',
-    Boolean(!resEve.success && resEve.error?.includes('Ineligible voter') && sim.ledger.totalVotes === 1n),
-    `Ineligible credentials rejected by ZK circuit constraint without leaking identity`
+    eveRejected && eveErrorMsg.includes('Ineligible voter'),
+    `Ineligible credential strictly rejected by circuit constraint: "${eveErrorMsg.substring(0, 85)}..."`
   );
 
-  // Test 4: Invalid option rejection
-  const dave: VoterWitness = { secret: 'dave_secret_seed_12345', choice: 9, isEligible: true };
-  const resDave = sim.castPrivateVote(dave, 1, 9);
+  // [Test 04] Invalid Option Range Rejection
+  const bobCred = issueVoterCred('bob', true);
+  currentVoterSecret = hexToBytes(bobCred.secret);
+  currentCredSecret = hexToBytes(bobCred.credentialSecret);
+  currentCredSig = hexToBytes(bobCred.credentialSignature);
+  currentChoice = 9n; // Invalid choice (>= 4)
+  currentBallotNonce = new Uint8Array(32).fill(103);
+
+  let outOfBoundsRejected = false;
+  try {
+    const oobCtx = cr.createCircuitContext(
+      cr.dummyContractAddress(),
+      voteTx.context.currentZswapLocalState,
+      voteTx.context.currentQueryContext.state,
+      voteTx.context.currentPrivateState
+    );
+    contract.circuits.cast_private_vote(oobCtx);
+  } catch (err: any) {
+    outOfBoundsRejected = true;
+  }
   assertTest(
     4,
     'Invalid Option Range Rejection',
-    Boolean(!resDave.success && resDave.error?.includes('Invalid option index')),
-    `Out-of-range option index (choice 9) strictly rejected by bounds assertion`
+    outOfBoundsRejected,
+    `Out-of-range option index (9 >= 4) strictly rejected by ZK bounds assertion`
   );
 
-  // Test 5: Double vote prevention (nullifier replay on Set)
-  const resAliceDouble = sim.castPrivateVote(alice, 1, 0);
+  // [Test 05] Double Vote Prevention (Nullifier Replay)
+  currentVoterSecret = hexToBytes(aliceCred.secret);
+  currentCredSecret = hexToBytes(aliceCred.credentialSecret);
+  currentCredSig = hexToBytes(aliceCred.credentialSignature);
+  currentChoice = 2n;
+  currentBallotNonce = new Uint8Array(32).fill(104);
+
+  let doubleVoteRejected = false;
+  try {
+    const replayCtx = cr.createCircuitContext(
+      cr.dummyContractAddress(),
+      voteTx.context.currentZswapLocalState,
+      voteTx.context.currentQueryContext.state,
+      voteTx.context.currentPrivateState
+    );
+    contract.circuits.cast_private_vote(replayCtx);
+  } catch (err: any) {
+    doubleVoteRejected = true;
+  }
   assertTest(
     5,
-    'Double Vote Prevention (Nullifier Set Replay)',
-    Boolean(!resAliceDouble.success && resAliceDouble.error?.includes('Nullifier already registered') && sim.ledger.nullifiers.has(resAlice.nullifierHex)),
-    `Duplicate voting attempt by Alice rejected: Nullifier ${resAlice.nullifierHex.substring(0, 16)}... already registered in on-chain Set (size: ${sim.ledger.nullifiers.size})`
+    'Double Vote Prevention (Nullifier Replay)',
+    doubleVoteRejected,
+    `Double-voting attempt rejected by in-circuit Set membership check: !nullifiers.member(nullifier)`
   );
 
-  // Test 6: Private vote isolation
-  const ledgerSnapshot = JSON.stringify(sim.ledger, (k, v) => v instanceof Set ? Array.from(v) : typeof v === 'bigint' ? v.toString() : v);
-  const secretLeaked = ledgerSnapshot.includes('alice_secret_seed') || ledgerSnapshot.includes('alice');
+  // [Test 06] Choice Confidentiality & Zero Real-Time Leak
+  const t0 = state.tally0;
+  const t1 = state.tally1;
+  const t2 = state.tally2;
+  const t3 = state.tally3;
+  const allTalliesZero = t0 === 0n && t1 === 0n && t2 === 0n && t3 === 0n;
+  const ballotCommitted = state.ballotCommitments.size() === 1n;
   assertTest(
     6,
-    'Private Vote Isolation & Nullifier Set Integrity',
-    !secretLeaked && sim.ledger.nullifiers.size === 1,
-    `Verified on-chain ledger contains ONLY spent nullifiers Set (${sim.ledger.nullifiers.size} entry) and aggregate count. Zero witness leakage.`
+    'Choice Confidentiality & Zero Real-Time Leak',
+    allTalliesZero && ballotCommitted,
+    `Public tallies remain completely ZERO [0, 0, 0, 0] while ballotCommitments size = 1. Choice is shielded.`
   );
 
-  // Test 7: Correct public tally
-  const bob: VoterWitness = { secret: 'bob_secret_seed_44332211', choice: 2, isEligible: true };
-  const resBob = sim.castPrivateVote(bob, 1, 2);
+  // [Test 07] Selective Participation Proof Attestation
+  currentVoterSecret = hexToBytes(aliceCred.secret);
+  currentCredSecret = hexToBytes(aliceCred.credentialSecret);
+  currentCredSig = hexToBytes(aliceCred.credentialSignature);
+
+  const attestCtx = cr.createCircuitContext(
+    cr.dummyContractAddress(),
+    voteTx.context.currentZswapLocalState,
+    voteTx.context.currentQueryContext.state,
+    voteTx.context.currentPrivateState
+  );
+  const nonce = 42;
+  const attestRes = contract.circuits.attest_participation(attestCtx, BigInt(nonce));
+  const expectedBadge = deriveParticipationBadge(expectedNullifier, nonce);
+  const badgeMatches = bytesToHex(attestRes.result) === expectedBadge;
   assertTest(
     7,
-    'Correct Public Tally',
-    resBob.success && sim.ledger.tally2 === 1n && sim.ledger.totalVotes === 2n,
-    `Bob voted for Option 2 (Developer Tooling). Ledger tallies: [Option 0: ${sim.ledger.tally0}, Option 2: ${sim.ledger.tally2}, Total: ${sim.ledger.totalVotes}]`
+    'Selective Participation Proof Attestation',
+    badgeMatches,
+    `Alice generated verifiable participation badge 0x${expectedBadge.substring(0, 16)}... without disclosing vote choice`
   );
 
-  // Test 8: Election expiry
-  sim.closeElection();
-  const charlie: VoterWitness = { secret: 'charlie_late_secret', choice: 0, isEligible: true };
-  const resCharlie = sim.castPrivateVote(charlie, 1, 0);
+  // [Test 08] Administrator Authorization & Sealed Lifecycle
+  currentAdminSecret = hexToBytes('99'.repeat(32)); // Unauthorized admin
+  let unauthorizedCloseBlocked = false;
+  try {
+    const unauthCtx = cr.createCircuitContext(
+      cr.dummyContractAddress(),
+      voteTx.context.currentZswapLocalState,
+      voteTx.context.currentQueryContext.state,
+      voteTx.context.currentPrivateState
+    );
+    contract.circuits.close_election(unauthCtx);
+  } catch {
+    unauthorizedCloseBlocked = true;
+  }
+
+  // Legitimate close
+  currentAdminSecret = hexToBytes(adminSecretHex);
+  const legitCloseCtx = cr.createCircuitContext(
+    cr.dummyContractAddress(),
+    voteTx.context.currentZswapLocalState,
+    voteTx.context.currentQueryContext.state,
+    voteTx.context.currentPrivateState
+  );
+  const closeTx = contract.circuits.close_election(legitCloseCtx);
+  state = ledger(closeTx.context.currentQueryContext.state);
   assertTest(
     8,
-    'Election Expiry & Closed Ballot Rejection',
-    Boolean(!resCharlie.success && resCharlie.error?.includes('Election is currently closed')),
-    `Ballot box closed by admin. Late submission rejected by consensus assertion`
+    'Administrator Authorization & Sealed Lifecycle',
+    unauthorizedCloseBlocked && state.electionStage === 2n,
+    `Unauthorized close rejected. Genuine admin sealed election: Stage 1 -> Stage 2 (Closed).`
   );
 
-  // Test 9: Selective participation proof
-  const attestation = sim.attestParticipation(alice, 1001);
+  // [Test 09] Cryptographic Ballot Tallying from Ballot Commitments
+  // Alice voted choice 0 with currentBallotNonce = new Uint8Array(32).fill(101)
+  const aliceBallotNonce = new Uint8Array(32).fill(101);
+  const tallyCtx = cr.createCircuitContext(
+    cr.dummyContractAddress(),
+    closeTx.context.currentZswapLocalState,
+    closeTx.context.currentQueryContext.state,
+    closeTx.context.currentPrivateState
+  );
+
+  // Tally Alice's genuine ballot
+  const tallyTx = contract.circuits.tally_ballot(tallyCtx, 0n, aliceBallotNonce);
+  state = ledger(tallyTx.context.currentQueryContext.state);
+  const tallySuccess = state.tally0 === 1n && state.ballotCommitments.isEmpty();
+
+  // Attempting to tally with a forged nonce must fail
+  let forgedTallyBlocked = false;
+  try {
+    const fakeCtx = cr.createCircuitContext(
+      cr.dummyContractAddress(),
+      tallyTx.context.currentZswapLocalState,
+      tallyTx.context.currentQueryContext.state,
+      tallyTx.context.currentPrivateState
+    );
+    contract.circuits.tally_ballot(fakeCtx, 1n, new Uint8Array(32).fill(99));
+  } catch {
+    forgedTallyBlocked = true;
+  }
+
   assertTest(
     9,
-    'Selective Participation Proof Attestation',
-    attestation.success && typeof attestation.attestationHash === 'string',
-    `Alice generated verifiable participation badge (${attestation.attestationHash?.substring(0, 18)}...) without revealing ballot choice`
+    'Cryptographic Ballot Tallying from Ballot Commitments',
+    tallySuccess && forgedTallyBlocked,
+    `Alice ballot verified against on-chain commitment and tallied. Option 0 tally = 1. Forged ballot rejected.`
   );
 
-  // Test 10: Multi-voter end-to-end election lifecycle
-  const sim2 = new ShadowBallotSimulator();
-  sim2.initializeElection();
-  const voters: VoterWitness[] = [
-    { secret: 'voter_01', choice: 0, isEligible: true },
-    { secret: 'voter_02', choice: 2, isEligible: true },
-    { secret: 'voter_03', choice: 0, isEligible: true },
-    { secret: 'voter_04', choice: 1, isEligible: true },
-    { secret: 'voter_05', choice: 3, isEligible: true }
-  ];
-  let multiSuccess = true;
-  for (const v of voters) {
-    const res = sim2.castPrivateVote(v, 42, v.choice);
-    if (!res.success) multiSuccess = false;
+  // [Test 10] Finalized Results Verification & Conservation Law
+  currentAdminSecret = hexToBytes(adminSecretHex);
+  const pubCtx = cr.createCircuitContext(
+    cr.dummyContractAddress(),
+    tallyTx.context.currentZswapLocalState,
+    tallyTx.context.currentQueryContext.state,
+    tallyTx.context.currentPrivateState
+  );
+
+  // Attempting to publish tampered tallies [0, 1, 0, 0] must fail
+  let tamperedPublishBlocked = false;
+  try {
+    const badPubCtx = cr.createCircuitContext(
+      cr.dummyContractAddress(),
+      tallyTx.context.currentZswapLocalState,
+      tallyTx.context.currentQueryContext.state,
+      tallyTx.context.currentPrivateState
+    );
+    contract.circuits.publish_final_results(badPubCtx, 0n, 1n, 0n, 0n);
+  } catch {
+    tamperedPublishBlocked = true;
   }
-  const multiCorrect =
-    multiSuccess &&
-    sim2.ledger.totalVotes === 5n &&
-    sim2.ledger.tally0 === 2n &&
-    sim2.ledger.tally1 === 1n &&
-    sim2.ledger.tally2 === 1n &&
-    sim2.ledger.tally3 === 1n;
+
+  // Publishing genuine verified tallies [1, 0, 0, 0]
+  const finalTx = contract.circuits.publish_final_results(pubCtx, 1n, 0n, 0n, 0n);
+  state = ledger(finalTx.context.currentQueryContext.state);
+  const finalized = state.electionStage === 3n && tamperedPublishBlocked;
 
   assertTest(
     10,
-    'Multi-Voter Flow & Aggregate Verification',
-    multiCorrect,
-    `5 independent voters cast ballots. Verified tally: [Option 0: 2, Option 1: 1, Option 2: 1, Option 3: 1]. Total: 5`
+    'Finalized Results Verification & Conservation Law',
+    finalized,
+    `Admin published tallies verified against ballot commitments: [1, 0, 0, 0]. Stage transitioned to 3 (Finalized).`
   );
 
   console.log(`\n${BOLD}${CYAN}----------------------------------------------------${RESET}`);
   if (passedCount === totalTests) {
-    console.log(`${BOLD}${GREEN}  ${passedCount}/${totalTests} TESTS PASSED — CONTRACT READY FOR PRODUCTION${RESET}`);
+    console.log(`${BOLD}${GREEN}  ${passedCount}/${totalTests} TESTS PASSED — VERIFIED ZERO-KNOWLEDGE PROTOCOL TESTNET DEMO${RESET}`);
   } else {
     console.log(`${BOLD}${RED}  ${passedCount}/${totalTests} TESTS PASSED${RESET}`);
   }

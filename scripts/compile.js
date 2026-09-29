@@ -99,6 +99,20 @@ if (compiled) {
     });
   }
 
+  // Sync to public/managed for client-side loading
+  const publicManaged = path.join(projectRoot, 'public', 'managed');
+  function copyDir(src, dest) {
+    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+    for (const item of fs.readdirSync(src)) {
+      const s = path.join(src, item);
+      const d = path.join(dest, item);
+      if (fs.statSync(s).isDirectory()) copyDir(s, d);
+      else fs.copyFileSync(s, d);
+    }
+  }
+  copyDir(targetPath, publicManaged);
+  console.log('\nSynced artifacts to public/managed for client bundle.');
+
   console.log('\n====================================================');
 } else {
   console.error('\nCompilation failed.');

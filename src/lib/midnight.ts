@@ -72,7 +72,7 @@ export const MIDNIGHT_CONFIG = {
   compactVersion: '0.23.0',
   compilerVersion: 'compactc 0.31.1 (toolchain 0.5.2)',
   provingSystem: 'PLONK / Halo2 ZK-SNARK',
-  circuits: ['initialize_election', 'cast_private_vote', 'close_election', 'publish_final_results', 'attest_participation'],
+  circuits: ['initialize_election', 'cast_private_vote', 'close_election', 'tally_ballot', 'publish_final_results', 'attest_participation'],
   ledgerState: [
     'electionId (Bytes<32>)',
     'eligibilityRoot (Bytes<32>)',
@@ -632,9 +632,25 @@ export async function executeCastPrivateVote(
 
   onStepProgress?.('5/5: Watching transaction consensus confirmation on Midnight indexer...');
   const txId = txResult.public?.txId || txResult.txId;
-  const txHash = txResult.public?.txHash || `0x${txId}`;
-  const blockHeight = txResult.public?.blockHeight || 1489243;
-  const blockHash = txResult.public?.blockHash;
+  if (!txId) {
+    throw new Error('Transaction submission failed: No transaction ID returned from Midnight consensus network.');
+  }
+
+  let txHash: string;
+  let blockHeight: number;
+  let blockHash: string | undefined;
+
+  if (txResult.public?.blockHeight) {
+    blockHeight = txResult.public.blockHeight;
+    blockHash = txResult.public.blockHash;
+    txHash = txResult.public.txHash || `0x${txId}`;
+  } else {
+    // Authoritatively confirm via Midnight indexer
+    const confirmed = await providers.publicDataProvider.watchForTxData(txId);
+    txHash = confirmed.txHash;
+    blockHeight = confirmed.blockHeight;
+    blockHash = confirmed.blockHash;
+  }
 
   return {
     txId,
@@ -696,9 +712,25 @@ export async function executeDeployBallotContract(
   });
 
   const contractAddress = deployed.deployTxData.public.contractAddress;
-  const deploymentTx = `0x${deployed.deployTxData.public.txId}`;
-  const blockHeight = deployed.deployTxData.public.blockHeight ?? 1489240;
-  const blockHash = deployed.deployTxData.public.blockHash ?? `0x${contractAddress.substring(0, 32)}`;
+  const txId = deployed.deployTxData.public.txId;
+  if (!contractAddress || !txId) {
+    throw new Error('Deployment failed: Invalid contract address or transaction ID returned from Midnight network.');
+  }
+
+  let blockHeight: number;
+  let blockHash: string;
+  let deploymentTx = `0x${txId}`;
+
+  if (deployed.deployTxData.public.blockHeight && deployed.deployTxData.public.blockHash) {
+    blockHeight = deployed.deployTxData.public.blockHeight;
+    blockHash = deployed.deployTxData.public.blockHash;
+  } else {
+    // Authoritatively query indexer for block height and hash
+    const confirmed = await providers.publicDataProvider.watchForTxData(txId);
+    blockHeight = confirmed.blockHeight;
+    blockHash = confirmed.blockHash;
+    deploymentTx = confirmed.txHash;
+  }
 
   onStepProgress?.('4/4: Contract deployed and registered on Midnight ' + network.toUpperCase() + ' ledger!');
 
@@ -737,11 +769,72 @@ export async function executeCloseElection(
   });
 
   const txResult = await contractInstance.callTx.close_election();
+  const txId = txResult.public?.txId || txResult.txId;
+  if (!txId) {
+    throw new Error('Close election transaction failed: No transaction ID returned.');
+  }
+
+  let txHash = txResult.public?.txHash || `0x${txId}`;
+  let blockHeight = txResult.public?.blockHeight;
+
+  if (!blockHeight) {
+    const confirmed = await providers.publicDataProvider.watchForTxData(txId);
+    txHash = confirmed.txHash;
+    blockHeight = confirmed.blockHeight;
+  }
+
   onStepProgress?.('3/3: Ballot box irreversibly sealed on Midnight consensus.');
 
   return {
-    txHash: txResult.public?.txHash || `0x${txResult.public?.txId}`,
-    blockHeight: txResult.public?.blockHeight || 1489250
+    txHash,
+    blockHeight
+  };
+}
+
+/**
+ * Tally Ballot: Cryptographically verify and tally an individual ballot commitment (election must be closed)
+ */
+export async function executeTallyBallot(
+  wallet: WalletState,
+  election: Election,
+  choice: number,
+  ballotNonceHex: string,
+  onStepProgress?: (step: string) => void
+): Promise<{ txHash: string; blockHeight: number }> {
+  const network = wallet.network;
+  setNetworkId(network);
+
+  onStepProgress?.('1/3: Verifying ballot preimage against on-chain commitment...');
+  const providers = createMidnightProviders(wallet, network);
+  const compiled = createCompiledBallotContract({});
+
+  onStepProgress?.('2/3: Executing tally_ballot() circuit on Midnight...');
+  const contractInstance: any = await (findDeployedContract as any)(providers as any, {
+    contractAddress: election.contractAddress,
+    compiledContract: compiled,
+    privateStateId: `shadowballot_tally_state_${election.id}`
+  });
+
+  const txResult = await contractInstance.callTx.tally_ballot(BigInt(choice), hexToBytes(ballotNonceHex));
+  const txId = txResult.public?.txId || txResult.txId;
+  if (!txId) {
+    throw new Error('Tally ballot transaction failed: No transaction ID returned.');
+  }
+
+  let txHash = txResult.public?.txHash || `0x${txId}`;
+  let blockHeight = txResult.public?.blockHeight;
+
+  if (!blockHeight) {
+    const confirmed = await providers.publicDataProvider.watchForTxData(txId);
+    txHash = confirmed.txHash;
+    blockHeight = confirmed.blockHeight;
+  }
+
+  onStepProgress?.('3/3: Ballot verified and counted into option tally on Midnight ledger.');
+
+  return {
+    txHash,
+    blockHeight
   };
 }
 
@@ -782,11 +875,25 @@ export async function executePublishResults(
     BigInt(tallies[3])
   );
 
+  const txId = txResult.public?.txId || txResult.txId;
+  if (!txId) {
+    throw new Error('Publish results transaction failed: No transaction ID returned.');
+  }
+
+  let txHash = txResult.public?.txHash || `0x${txId}`;
+  let blockHeight = txResult.public?.blockHeight;
+
+  if (!blockHeight) {
+    const confirmed = await providers.publicDataProvider.watchForTxData(txId);
+    txHash = confirmed.txHash;
+    blockHeight = confirmed.blockHeight;
+  }
+
   onStepProgress?.('3/3: Finalized tallies verified and recorded on Midnight ledger.');
 
   return {
-    txHash: txResult.public?.txHash || `0x${txResult.public?.txId}`,
-    blockHeight: txResult.public?.blockHeight || 1489255
+    txHash,
+    blockHeight
   };
 }
 
