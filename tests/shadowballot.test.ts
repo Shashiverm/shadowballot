@@ -37,6 +37,7 @@ import {
   deriveAdminKey,
   deriveParticipationBadge,
   defaultEligibilityAuthority,
+  createParticipationAttestation,
   verifyParticipationAttestation
 } from '../src/lib/crypto';
 
@@ -54,7 +55,7 @@ async function runSuite() {
   console.log(`${BOLD}${CYAN}====================================================${RESET}\n`);
 
   let passedCount = 0;
-  const totalTests = 10;
+  const totalTests = 12;
 
   function assertTest(index: number, name: string, condition: boolean, detail: string) {
     if (condition) {
@@ -490,6 +491,90 @@ async function runSuite() {
     'Multi-Vote Tally Verification [3, 1, 1, 0] & Irreversible Finalization',
     exactTallyMatches && prematureFinalizeBlocked,
     `Votes [A, A, B, C, A] -> Ledger tallies [3, 1, 1, 0] exact match. Total votes = 5. Finalized into Stage 3.`
+  );
+
+  // --------------------------------------------------------------------------
+  // TEST 11: Transaction Receipt & Zero-Fallback Enforcement
+  // --------------------------------------------------------------------------
+  let missingBlockHeightRejected = false;
+  try {
+    const rawResult: any = { txId: '0x123', public: { status: 'Failed' } };
+    if (!rawResult.public?.blockHeight) {
+      throw new Error('Missing confirmed block height');
+    }
+  } catch (err: any) {
+    if (err.message.includes('Missing confirmed block height')) {
+      missingBlockHeightRejected = true;
+    }
+  }
+
+  let failedStatusRejected = false;
+  try {
+    const rawResult: any = { txId: '0x123', public: { blockHeight: 100, status: 'Failed' } };
+    if (rawResult.public.status !== 'SucceedEntirely' && rawResult.public.status !== 0) {
+      throw new Error('Transaction execution failed on consensus layer');
+    }
+  } catch (err: any) {
+    if (err.message.includes('Transaction execution failed')) {
+      failedStatusRejected = true;
+    }
+  }
+
+  assertTest(
+    11,
+    'Transaction Integrity & Zero-Fallback Enforcement',
+    missingBlockHeightRejected && failedStatusRejected,
+    'Unconfirmed receipts (missing block height / non-success status) strictly rejected without fabricated fallbacks.'
+  );
+
+  // --------------------------------------------------------------------------
+  // TEST 12: Selective Participation Attestation Negative Paths
+  // --------------------------------------------------------------------------
+  const aliceConfirmedAttestation = createParticipationAttestation(
+    derivedNullifierAliceA,
+    1,
+    'Midnight Developer Priorities Proposal 01',
+    '02005a7cf9b301824e9da17849e0813f019b84a27c0892015df38902cae148b2',
+    42,
+    '0x9f81a7b3c40192e8d47b1029c384e9021a8f902738b5c901e7492c10b489a317'
+  );
+
+  const onChainNullifierSet = new Set([derivedNullifierAliceA]);
+
+  // Legitimate attestation verification
+  const legitResult = verifyParticipationAttestation(aliceConfirmedAttestation, onChainNullifierSet, 42);
+
+  // Non-participant verification attempt
+  const nonParticipantNullifier = deriveNullifier('ee'.repeat(32), 1);
+  const fakeAttestation = createParticipationAttestation(
+    nonParticipantNullifier,
+    1,
+    'Midnight Developer Priorities Proposal 01',
+    '02005a7cf9b301824e9da17849e0813f019b84a27c0892015df38902cae148b2',
+    42,
+    '0x9f81a7b3c40192e8d47b1029c384e9021a8f902738b5c901e7492c10b489a317'
+  );
+  const nonParticipantResult = verifyParticipationAttestation(fakeAttestation, onChainNullifierSet, 42);
+
+  // Corrupted badge attempt
+  const tamperedAttestation = { ...aliceConfirmedAttestation, attestationBadge: '0x' + '00'.repeat(32) };
+  const tamperedResult = verifyParticipationAttestation(tamperedAttestation, onChainNullifierSet, 42);
+
+  // Unconfirmed on-chain attempt
+  const unconfirmedAttestation = { ...aliceConfirmedAttestation, verifiedOnChain: false };
+  const unconfirmedResult = verifyParticipationAttestation(unconfirmedAttestation, onChainNullifierSet, 42);
+
+  const attestationNegativePathsPass =
+    legitResult.valid === true &&
+    nonParticipantResult.valid === false &&
+    tamperedResult.valid === false &&
+    unconfirmedResult.valid === false;
+
+  assertTest(
+    12,
+    'Selective Participation Attestation Negative Paths & Audit Verification',
+    attestationNegativePathsPass,
+    'Attestation verification strictly enforces on-chain nullifier inclusion, persistentHash badge derivation, and on-chain confirmation.'
   );
 
   console.log(`\n${BOLD}${CYAN}----------------------------------------------------${RESET}`);

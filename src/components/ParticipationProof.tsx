@@ -45,29 +45,25 @@ export const ParticipationProof: React.FC<ParticipationProofProps> = ({
       return;
     }
 
+    if (!wallet || !wallet.isConnected) {
+      setErrorMsg(
+        'Wallet Connection Required: Please connect your Midnight wallet to execute the attest_participation circuit on Midnight network.'
+      );
+      return;
+    }
+
     setIsGenerating(true);
     setProgressStep('1/4: Checking eligibility credential against election root...');
 
     try {
-      if (wallet && wallet.isConnected) {
-        const newAttest = await executeAttestParticipation(
-          wallet,
-          election,
-          voterCred,
-          42,
-          (step) => setProgressStep(step)
-        );
-        setAttestation(newAttest);
-      } else {
-        const newAttest = createParticipationAttestation(
-          voterNullifier,
-          election.id,
-          election.title,
-          election.contractAddress,
-          42
-        );
-        setAttestation(newAttest);
-      }
+      const newAttest = await executeAttestParticipation(
+        wallet,
+        election,
+        voterCred,
+        42,
+        (step) => setProgressStep(step)
+      );
+      setAttestation(newAttest);
     } catch (err: any) {
       setErrorMsg(err?.message || 'Failed to synthesize participation attestation.');
     } finally {

@@ -9,7 +9,7 @@ import { WalletModal } from './components/WalletModal';
 import { WalletGate } from './components/WalletGate';
 import { Footer } from './components/Footer';
 import { Election, WalletState, VoterCredential, VoteReceipt, MidnightNetwork } from './lib/types';
-import { INITIAL_ELECTIONS, setMidnightNetwork, executeCloseElection, executePublishResults } from './lib/midnight';
+import { INITIAL_ELECTIONS, setMidnightNetwork, executeCloseElection, executePublishResults, fetchContractLedgerState } from './lib/midnight';
 import { getOrCreateVoterCredential } from './lib/crypto';
 import { connectInjectedWallet, discoverMidnightWallets } from './lib/wallet';
 
@@ -90,6 +90,40 @@ export const App: React.FC = () => {
       setWallet((prev) => ({ ...prev, isInstalled: true }));
     }
   }, []);
+
+  // Synchronize initial elections with live Midnight indexer if reachable
+  useEffect(() => {
+    async function syncElections() {
+      for (const el of elections) {
+        if (!el.contractAddress) continue;
+        try {
+          const live = await fetchContractLedgerState(el.contractAddress, wallet.network);
+          if (live) {
+            setElections((prev) =>
+              prev.map((item) => {
+                if (item.id !== el.id) return item;
+                const isFinalized = live.electionStage === 3;
+                const tallies = [live.tally0, live.tally1, live.tally2, live.tally3];
+                return {
+                  ...item,
+                  electionStage: live.electionStage,
+                  status: live.electionStage === 1 ? 'active' : live.electionStage === 2 ? 'closed' : 'finalized',
+                  totalVotes: live.totalVotes,
+                  options: item.options.map((opt, idx) => ({
+                    ...opt,
+                    voteCount: isFinalized ? (tallies[idx] ?? opt.voteCount) : opt.voteCount
+                  }))
+                };
+              })
+            );
+          }
+        } catch {
+          // indexer query offline or loading
+        }
+      }
+    }
+    syncElections();
+  }, [wallet.network]);
 
   const handleConnectInjected = async (walletId?: string) => {
     setWallet((prev) => ({ ...prev, isConnecting: true, error: null }));
@@ -188,7 +222,7 @@ export const App: React.FC = () => {
     }
   };
 
-  const handlePublishResults = async (electionId: number, tallies?: [number, number, number, number]) => {
+  const handlePublishResults = async (electionId: number) => {
     const el = elections.find((e) => e.id === electionId);
     if (!el) return;
     if (!wallet.isConnected) {
@@ -202,17 +236,20 @@ export const App: React.FC = () => {
 
     try {
       await executePublishResults(wallet, el, el.adminSecret || 'aa'.repeat(32));
+      const liveState = await fetchContractLedgerState(el.contractAddress, wallet.network);
       setElections((prev) =>
         prev.map((item) => {
           if (item.id !== electionId) return item;
-          const updatedOptions = tallies ? item.options.map((opt, idx) => ({
+          const liveTallies = liveState ? [liveState.tally0, liveState.tally1, liveState.tally2, liveState.tally3] : null;
+          const updatedOptions = liveTallies ? item.options.map((opt, idx) => ({
             ...opt,
-            voteCount: tallies[idx]
+            voteCount: liveTallies[idx] ?? opt.voteCount
           })) : item.options;
           return {
             ...item,
             status: 'finalized',
             electionStage: 3,
+            totalVotes: liveState ? liveState.totalVotes : item.totalVotes,
             options: updatedOptions
           };
         })

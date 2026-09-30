@@ -6,7 +6,7 @@ interface OrganizerDashboardProps {
   elections: Election[];
   onCreateElection: (newElection: Omit<Election, 'id'>) => void;
   onCloseElection: (electionId: number) => Promise<void>;
-  onPublishResults: (electionId: number, tallies?: [number, number, number, number]) => Promise<void>;
+  onPublishResults: (electionId: number) => Promise<void>;
   walletAddress: string;
   wallet?: WalletState;
 }
@@ -34,7 +34,6 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
 
   // Publish Results Modal State
   const [publishElectionId, setPublishElectionId] = useState<number | null>(null);
-  const [publishTallies, setPublishTallies] = useState<[string, string, string, string]>(['0', '0', '0', '0']);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
@@ -121,12 +120,6 @@ export const OrganizerDashboard: React.FC<OrganizerDashboardProps> = ({
   const handleOpenPublish = (el: Election) => {
     setPublishElectionId(el.id);
     setPublishError(null);
-    setPublishTallies([
-      String(el.options[0]?.voteCount || 0),
-      String(el.options[1]?.voteCount || 0),
-      String(el.options[2]?.voteCount || 0),
-      String(el.options[3]?.voteCount || 0)
-    ]);
   };
 
   const handleExecutePublish = async () => {

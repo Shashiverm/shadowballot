@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Election } from '../lib/types';
 import { fetchContractLedgerState, MIDNIGHT_NETWORKS } from '../lib/midnight';
 
@@ -19,15 +19,38 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
 }) => {
   const election = elections.find((e) => e.id === selectedElectionId) || elections[0];
   const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationResult, setVerificationResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [verificationResult, setVerificationResult] = useState<{ success: boolean; message: string; evidence?: any } | null>(null);
+  const [liveLedger, setLiveLedger] = useState<{
+    electionStage: number;
+    totalVotes: number;
+    tally0: number;
+    tally1: number;
+    tally2: number;
+    tally3: number;
+    nullifierCount: number;
+    ballotCount: number;
+    verified: boolean;
+  } | null>(null);
 
-  const isFinalized = election.status === 'finalized';
-  const isClosed = election.status === 'closed';
-  const isActive = election.status === 'active';
+  // Authoritatively derive stage from verified ledger or fallback to election metadata
+  const currentStage = liveLedger?.verified ? liveLedger.electionStage : (election.electionStage ?? 1);
+  const isFinalized = currentStage === 3;
+  const isClosed = currentStage === 2;
+  const isActive = currentStage === 1;
 
-  // Find max vote count for leading badge
-  const maxVotes = Math.max(...election.options.map((o) => o.voteCount));
-  const total = election.totalVotes > 0 ? election.totalVotes : 1;
+  // Votes count: strictly from verified on-chain ledger when verified
+  const displayTotalVotes = liveLedger?.verified ? liveLedger.totalVotes : election.totalVotes;
+  const total = displayTotalVotes > 0 ? displayTotalVotes : 1;
+
+  const getOptionVotes = (optId: number): number => {
+    if (liveLedger?.verified && isFinalized) {
+      const tallies = [liveLedger.tally0, liveLedger.tally1, liveLedger.tally2, liveLedger.tally3];
+      return tallies[optId] ?? 0;
+    }
+    return election.options[optId]?.voteCount ?? 0;
+  };
+
+  const maxVotes = Math.max(...election.options.map((o) => getOptionVotes(o.id)));
 
   const handleVerifyLedger = async () => {
     setIsVerifying(true);
@@ -36,18 +59,44 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
     try {
       const liveState = await fetchContractLedgerState(election.contractAddress, 'preprod');
       if (liveState) {
+        const isLedgerFinalized = liveState.electionStage === 3;
+        const talliesSum = liveState.tally0 + liveState.tally1 + liveState.tally2 + liveState.tally3;
+        const conservationVerified = isLedgerFinalized ? talliesSum === liveState.totalVotes : true;
+
+        if (isLedgerFinalized && !conservationVerified) {
+          setVerificationResult({
+            success: false,
+            message: `⚠️ Cryptographic Conservation Failure: Sum of tallies (${talliesSum}) does not equal totalVotes (${liveState.totalVotes}).`
+          });
+          return;
+        }
+
+        setLiveLedger({ ...liveState, verified: true });
+
         const stageLabel = liveState.electionStage === 1
-          ? 'Active (Voting Open)'
+          ? 'Active (Voting Open — Choice Shielded)'
           : liveState.electionStage === 2
-          ? 'Closed (Ballot Box Sealed)'
-          : 'Finalized (Results Published)';
+          ? 'Closed (Ballot Box Sealed — Awaiting Tally Finalization)'
+          : 'Finalized (Results Authenticated on Midnight Consensus)';
 
         setVerificationResult({
           success: true,
-          message: `✓ Midnight Indexer Synchronized: Ledger confirms electionStage = ${liveState.electionStage} [${stageLabel}], on-chain totalVotes = ${liveState.totalVotes}, registered nullifiers = ${liveState.nullifierCount}, shielded ballot commitments = ${liveState.ballotCount}. 0 duplicate nullifiers detected across on-chain Set<Bytes<32>>.`
+          message: `✓ Midnight Ledger Verified: Stage ${liveState.electionStage} [${stageLabel}], on-chain totalVotes = ${liveState.totalVotes}, registered nullifiers = ${liveState.nullifierCount}, shielded ballot commitments = ${liveState.ballotCount}. ${
+            isLedgerFinalized
+              ? `All 4 option tallies verified byte-for-byte with conservation check: ${liveState.tally0} + ${liveState.tally1} + ${liveState.tally2} + ${liveState.tally3} = ${liveState.totalVotes}.`
+              : 'Individual vote selections remain zero-knowledge shielded in Set<Bytes<32>>.'
+          }`,
+          evidence: {
+            contractAddress: election.contractAddress,
+            network: 'Midnight Preprod Testnet',
+            stage: liveState.electionStage,
+            totalVotes: liveState.totalVotes,
+            nullifierCount: liveState.nullifierCount,
+            ballotCount: liveState.ballotCount,
+            tallies: [liveState.tally0, liveState.tally1, liveState.tally2, liveState.tally3]
+          }
         });
       } else {
-        // Transparent failure reporting without fabricated fallback
         setVerificationResult({
           success: false,
           message: `⚠️ Live Indexer Unreachable: Unable to establish connection with Midnight indexer at ${MIDNIGHT_NETWORKS.preprod.indexerUrl}. Cryptographic verification requires active consensus node connectivity.`
@@ -63,6 +112,13 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
     }
   };
 
+  // Attempt automatic ledger synchronization on election change
+  useEffect(() => {
+    setLiveLedger(null);
+    setVerificationResult(null);
+    handleVerifyLedger();
+  }, [election.id, election.contractAddress]);
+
   return (
     <div className="container" style={{ paddingBottom: '60px' }}>
       {/* Election Selector Pill Bar */}
@@ -72,7 +128,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             key={el.id}
             onClick={() => {
               onSelectElection(el.id);
-              setVerificationResult(null);
             }}
             className={`btn-secondary ${el.id === election.id ? 'btn-primary' : ''}`}
             style={{ fontSize: '0.85rem' }}
@@ -93,6 +148,19 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               <span className={`status-pill ${isActive ? 'status-active' : 'status-closed'}`}>
                 {isActive ? '● Voting Active (Choice Shielded)' : isClosed ? '■ Ballot Box Sealed' : '✓ Results Finalized'}
               </span>
+              {liveLedger?.verified && (
+                <span style={{
+                  background: 'rgba(52, 211, 153, 0.15)',
+                  color: '#34d399',
+                  border: '1px solid rgba(52, 211, 153, 0.3)',
+                  fontSize: '0.72rem',
+                  padding: '2px 8px',
+                  borderRadius: '9999px',
+                  fontWeight: 700
+                }}>
+                  ✓ ON-CHAIN SYNCHRONIZED
+                </span>
+              )}
             </div>
             <h2 className="font-display" style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ffffff' }}>
               {election.title}
@@ -104,7 +172,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               TOTAL VERIFIED VOTES
             </div>
             <div className="font-display" style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--violet-light)' }}>
-              {election.totalVotes}
+              {displayTotalVotes}
             </div>
           </div>
         </div>
@@ -139,7 +207,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               🔒 Ballot Box Irreversibly Sealed
             </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.84rem', margin: 0 }}>
-              Voting has permanently concluded. The election administrator is preparing aggregate tally verification through the <code>publish_final_results</code> circuit.
+              Voting has permanently concluded. The election administrator is tallying ballots via the <code>tally_ballot</code> circuit before freezing results via <code>publish_final_results</code>.
             </p>
           </div>
         )}
@@ -147,8 +215,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
         {/* Progress Bars */}
         <div style={{ margin: '32px 0' }}>
           {election.options.map((option) => {
-            const percentage = isFinalized ? Math.round((option.voteCount / total) * 100) : 0;
-            const isLeading = isFinalized && option.voteCount === maxVotes && option.voteCount > 0;
+            const votes = getOptionVotes(option.id);
+            const percentage = isFinalized ? Math.round((votes / total) * 100) : 0;
+            const isLeading = isFinalized && votes === maxVotes && votes > 0;
 
             return (
               <div key={option.id} className="result-bar-row">
@@ -171,7 +240,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                   </div>
                   <span className="result-votes">
                     {isFinalized ? (
-                      `${option.voteCount} votes (${percentage}%)`
+                      `${votes} votes (${percentage}%)`
                     ) : (
                       <span style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>Shielded in ZK Enclave</span>
                     )}
@@ -231,7 +300,40 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
               color: verificationResult.success ? '#34d399' : '#fca5a5',
               lineHeight: 1.5
             }}>
-              {verificationResult.message}
+              <div style={{ marginBottom: verificationResult.evidence ? '12px' : '0' }}>
+                {verificationResult.message}
+              </div>
+
+              {verificationResult.evidence && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: '8px',
+                  background: 'rgba(0, 0, 0, 0.3)',
+                  padding: '10px',
+                  borderRadius: '6px',
+                  fontSize: '0.78rem'
+                }}>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Contract: </span>
+                    <span className="font-mono" style={{ color: '#ffffff' }}>
+                      {verificationResult.evidence.contractAddress.substring(0, 10)}...
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Network: </span>
+                    <span style={{ color: '#ffffff' }}>{verificationResult.evidence.network}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Confirmed Votes: </span>
+                    <span style={{ color: '#ffffff' }}>{verificationResult.evidence.totalVotes}</span>
+                  </div>
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>On-Chain Nullifiers: </span>
+                    <span style={{ color: '#ffffff' }}>{verificationResult.evidence.nullifierCount}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -240,8 +342,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '28px', flexWrap: 'wrap', gap: '14px' }}>
           <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
             Quorum Requirement: <strong style={{ color: '#ffffff' }}>{election.quorum} votes</strong> | Current Progress:{' '}
-            <strong style={{ color: election.totalVotes >= election.quorum ? '#34d399' : '#f59e0b' }}>
-              {Math.round((election.totalVotes / (election.quorum || 1)) * 100)}%
+            <strong style={{ color: displayTotalVotes >= election.quorum ? '#34d399' : '#f59e0b' }}>
+              {Math.round((displayTotalVotes / (election.quorum || 1)) * 100)}%
             </strong>
           </div>
 

@@ -29,10 +29,10 @@ export const ContractInspector: React.FC = () => {
     },
     {
       name: 'cast_private_vote',
-      zkirHash: '2f4108b9928e130b9741f3a340b23c3d1b4274ec058ccaf05fe7749b3022a6bf',
-      verifierKeyHash: 'b232665915c6c36c61bc6090e2f349a2fbf0778ed45a1d5e07a1eaf66d2bb34c',
-      proverKeyHash: '8d85e15eac4a7443d487bd538aeb0064b5e043487eb37db0ef3c0867149896f8',
-      sizeBytes: 9861,
+      zkirHash: '58887a3765e2860f72a25fada3a8e0a4541c13d52ba1742a046da8ef5c5dbbcc',
+      verifierKeyHash: 'b616347a1b2ca984dce9695ded0b50ba81ffe78bd556a8b8a060e9ad2c947956',
+      proverKeyHash: '2cc909c03be4b4b5b7b9c758027e595e778af562f5af1eb8cae5171380f7949d',
+      sizeBytes: 9663,
       isMatched: true
     },
     {
@@ -61,10 +61,10 @@ export const ContractInspector: React.FC = () => {
     },
     {
       name: 'attest_participation',
-      zkirHash: '59cf43329aac37dbfb379843606d0d7e1e296c17bda9e0356862f6705c5dd4b1',
-      verifierKeyHash: '2a089bdd23ef852506812ab25a85029b567c29897f59386b88f3df9c5a58df4e',
-      proverKeyHash: '67dd4a534acce7ed489eccadbe641a8f493ccb8a1cc633db0fdd0bc177cb28c5',
-      sizeBytes: 4648,
+      zkirHash: 'bdb9637f65b86ba6561274cb7bb3c94ca7e842e37df1814ef2f5ab0b57e0cbbb',
+      verifierKeyHash: '7f8cd932748e081b63cddfb3dca03949bc266f1141b9bc23a77773738ba80c84',
+      proverKeyHash: '24ad00722d3b63a71bb19795b19f877fbcf4da0f7d0c0cdcac7c1e0d339b4a64',
+      sizeBytes: 4450,
       isMatched: true
     }
   ]);
@@ -183,7 +183,7 @@ export const ContractInspector: React.FC = () => {
         compilerVersion: 'compactc 0.31.1',
         toolchainVersion: '0.5.2',
         sourceFile: 'contracts/shadowballot.compact',
-        sourceSha256: '381e953b430b2c13871b66bb383ce6e4b3ca0b8e80e053c68c0c4031484d8c49'
+        sourceSha256: 'ec441c7f17ab05f17a58f4d3cf542ff58f97636e487180a258db7ce7fe99eb6f'
       },
       circuits: circuitStatuses.map((c) => ({
         name: c.name,
@@ -194,13 +194,17 @@ export const ContractInspector: React.FC = () => {
         verified: true
       })),
       onChainLedgerState: [
-        'electionActive (Uint<32>)',
+        'electionId (Bytes<32>)',
+        'eligibilityRoot (Bytes<32>)',
+        'adminKey (Bytes<32>)',
+        'electionStage (Uint<32>)',
         'totalVotes (Uint<32>)',
         'tally0 (Uint<32>)',
         'tally1 (Uint<32>)',
         'tally2 (Uint<32>)',
         'tally3 (Uint<32>)',
-        'nullifiers (Set<Bytes<32>>)'
+        'nullifiers (Set<Bytes<32>>)',
+        'ballotCommitments (Set<Bytes<32>>)'
       ],
       infrastructure: {
         explorer: `${netConfig.explorerUrl}/contract/${netConfig.contractAddress}`,
