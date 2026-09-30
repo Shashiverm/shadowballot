@@ -32,3 +32,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Sensitive credentials & election secrets
+credentials/
+public/credentials/
+*.credentials.json
+*.secret
+*.key
