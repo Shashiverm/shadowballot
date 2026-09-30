@@ -498,12 +498,12 @@ export circuit cast_private_vote(disclosedNullifier: Bytes<32>, optionChoice: Ui
 
           {verificationSummary && (
             <div style={{
-              background: 'rgba(16, 185, 129, 0.12)',
-              border: '1px solid rgba(16, 185, 129, 0.35)',
+              background: verificationSummary.startsWith('✓') ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
+              border: verificationSummary.startsWith('✓') ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(244, 63, 94, 0.35)',
               borderRadius: '10px',
               padding: '12px 16px',
               fontSize: '0.82rem',
-              color: '#34d399',
+              color: verificationSummary.startsWith('✓') ? '#34d399' : '#fda4af',
               marginBottom: '16px',
               lineHeight: 1.5
             }}>

@@ -94,7 +94,7 @@ export const WalletGate: React.FC<WalletGateProps> = ({
               <rect x="2" y="4" width="20" height="16" rx="4" />
               <circle cx="16" cy="12" r="2" />
             </svg>
-            <span>Connect Midnight Wallet & Vote</span>
+            <span>Connect Midnight Wallet to {actionName}</span>
           </button>
 
           <button
