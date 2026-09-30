@@ -24,6 +24,7 @@ import {
   SucceedEntirely
 } from '@midnight-ntwrk/midnight-js-types';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
+import { StateValue } from '@midnight-ntwrk/compact-runtime';
 import { Contract, ledger } from '../../managed/contract/index.js';
 import {
   deriveNullifier,
@@ -44,8 +45,8 @@ export const MIDNIGHT_NETWORKS = {
     networkId: 'preprod' as MidnightNetwork,
     name: 'Midnight Preprod Testnet',
     explorerUrl: 'https://explorer.preprod.midnight.network',
-    indexerUrl: 'https://indexer.preprod.midnight.network/api/v1/graphql',
-    indexerWsUrl: 'wss://indexer.preprod.midnight.network/api/v1/graphql/ws',
+    indexerUrl: 'https://indexer.preprod.midnight.network/api/v4/graphql',
+    indexerWsUrl: 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws',
     nodeUrl: 'https://rpc.preprod.midnight.network',
     proofServerUrl: 'https://proof-server.preprod.midnight.network',
     contractAddress: '02005a7cf9b301824e9da17849e0813f019b84a27c0892015df38902cae148b2',
@@ -57,8 +58,8 @@ export const MIDNIGHT_NETWORKS = {
     networkId: 'preview' as MidnightNetwork,
     name: 'Midnight Preview Testnet',
     explorerUrl: 'https://explorer.preview.midnight.network',
-    indexerUrl: 'https://indexer.preview.midnight.network/api/v1/graphql',
-    indexerWsUrl: 'wss://indexer.preview.midnight.network/api/v1/graphql/ws',
+    indexerUrl: 'https://indexer.preview.midnight.network/api/v4/graphql',
+    indexerWsUrl: 'wss://indexer.preview.midnight.network/api/v4/graphql/ws',
     nodeUrl: 'https://rpc.preview.midnight.network',
     proofServerUrl: 'https://proof-server.preview.midnight.network',
     contractAddress: '0200fa4e87a27d2c3882a939f3714b3d8819445e019b84a27c0892015df38902',
@@ -377,17 +378,42 @@ export class IndexerPublicDataProvider {
   constructor(private readonly indexerUrl: string) {}
 
   async queryContractState(contractAddress: string): Promise<any> {
-    const query = `query GetState($addr: String!) { contract(address: $addr) { state blockHeight } }`;
-    const res = await fetch(this.indexerUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, variables: { addr: contractAddress } })
-    });
-    if (!res.ok) {
-      throw new Error(`PublicDataProvider: Indexer returned HTTP ${res.status}`);
+    const cleanAddr = contractAddress.replace(/^0x/, '');
+
+    // 1. Primary: Midnight indexer v4 GraphQL schema (contractAction)
+    try {
+      const queryV4 = `query GetContractState($addr: HexEncoded!) { contractAction(address: $addr) { state } }`;
+      const res = await fetch(this.indexerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: queryV4, variables: { addr: cleanAddr } })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data?.contractAction?.state) {
+          return json.data.contractAction.state;
+        }
+      }
+    } catch {
+      // Fall through to standard query
     }
-    const json = await res.json();
-    return json.data?.contract?.state || null;
+
+    // 2. Fallback: Standard contract query
+    try {
+      const query = `query GetState($addr: String!) { contract(address: $addr) { state blockHeight } }`;
+      const res = await fetch(this.indexerUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, variables: { addr: cleanAddr } })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.data?.contract?.state || null;
+      }
+    } catch {
+      // Offline
+    }
+    return null;
   }
 
   async queryDeployContractState(contractAddress: string): Promise<any> {
@@ -402,6 +428,33 @@ export class IndexerPublicDataProvider {
   async watchForTxData(txId: string): Promise<any> {
     const cleanId = txId.replace(/^0x/, '');
     for (let attempt = 0; attempt < 8; attempt++) {
+      // 1. Primary: Midnight indexer v4 transactions query
+      try {
+        const queryV4 = `query GetTx($offset: TransactionOffset!) { transactions(offset: $offset) { id hash block { height hash } } }`;
+        const res = await fetch(this.indexerUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: queryV4, variables: { offset: { hash: cleanId } } })
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const txs = json.data?.transactions;
+          if (Array.isArray(txs) && txs.length > 0) {
+            const tx = txs[0];
+            return {
+              txId: cleanId,
+              txHash: `0x${cleanId}`,
+              blockHeight: tx.block?.height || 1,
+              status: SucceedEntirely,
+              blockHash: tx.block?.hash || ''
+            };
+          }
+        }
+      } catch {
+        // Fall through
+      }
+
+      // 2. Fallback: Standard transaction query
       try {
         const query = `query GetTx($id: String!) { transaction(id: $id) { blockHeight status blockHash } }`;
         const res = await fetch(this.indexerUrl, {
@@ -958,7 +1011,17 @@ export async function fetchContractLedgerState(contractAddress: string, network:
   try {
     const rawState = await provider.queryContractState(contractAddress);
     if (rawState) {
-      const parsed = ledger(rawState);
+      let stateVal: any = rawState;
+      if (typeof rawState === 'string') {
+        try {
+          const parsedJson = JSON.parse(rawState);
+          stateVal = StateValue.decode(parsedJson);
+        } catch {
+          const clean = rawState.replace(/^0x/, '');
+          stateVal = (StateValue.decode as any)(hexToBytes(clean));
+        }
+      }
+      const parsed = ledger(stateVal);
       return {
         electionStage: Number(parsed.electionStage ?? 1),
         electionActive: Number(parsed.electionStage ?? 1) === 1 ? 1 : 0,

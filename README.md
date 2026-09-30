@@ -8,7 +8,7 @@
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-shadowballot.vercel.app-10b981?style=flat-square&logo=vercel)](https://shadowballot.vercel.app/)
 [![Video Walkthrough](https://img.shields.io/badge/YouTube-Video%20Demo-red?style=flat-square&logo=youtube)](https://youtu.be/1QyBvoCFdss)
 [![CI Quality Gate](https://img.shields.io/badge/CI-Passing%20✓-10b981?style=flat-square)](https://github.com/Shashiverm/shadowballot/actions)
-[![Test Suite](https://img.shields.io/badge/Tests-10%2F10%20Passed-10b981?style=flat-square)](tests/shadowballot.test.ts)
+[![Test Suite](https://img.shields.io/badge/Tests-12%2F12%20Passed-10b981?style=flat-square)](tests/shadowballot.test.ts)
 [![Compact Language](https://img.shields.io/badge/Compact-v0.23%20%7C%200.31.1-8b5cf6?style=flat-square)](contracts/shadowballot.compact)
 [![Midnight.js](https://img.shields.io/badge/Midnight.js-Contracts%20v4.1.1-6366f1?style=flat-square)](package.json)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](LICENSE)
@@ -147,8 +147,8 @@ Auditors and developers can inspect the exact Compact smart contract rules, priv
 
 ---
 
-### 7. Zero-Knowledge Automated Test Suite (10/10 Passed)
-The complete contract verification suite testing election creation, valid voting, nullifier Set replay prevention, choice isolation, and multi-voter aggregate flows.
+### 7. Zero-Knowledge Automated Test Suite (12/12 Passed)
+The complete contract verification suite testing election creation, valid voting, nullifier Set replay prevention, choice isolation, transaction integrity, selective disclosure, and multi-voter aggregate flows.
 
 ![10/10 Tests Passed](docs/screenshots/07_test_suite_passed.png)
 
@@ -175,7 +175,7 @@ Fully responsive across iOS Safari, Android, tablets, and desktop devices with a
 
 ---
 
-## Automated Test Suite (10/10 Passed)
+## Automated Test Suite (12/12 Passed)
 
 The contract test suite (`tests/shadowballot.test.ts`) verifies all security boundaries and the on-chain nullifier Set:
 
@@ -209,9 +209,13 @@ npm test
     Alice ballot verified against on-chain commitment and counted into tally0. Double-spend prevented by removal.
   ✓ [Test 10] Multi-Vote Tally Verification [3, 1, 1, 0] & Irreversible Finalization
     Votes [A, A, B, C, A] -> Ledger tallies [3, 1, 1, 0] exact match. Total votes = 5. Finalized into Stage 3.
+  ✓ [Test 11] Transaction Integrity & Zero-Fallback Enforcement
+    Unconfirmed receipts (missing block height / non-success status) strictly rejected without fabricated fallbacks.
+  ✓ [Test 12] Selective Participation Attestation Negative Paths & Audit Verification
+    Attestation verification strictly enforces on-chain nullifier inclusion, persistentHash badge derivation, and on-chain confirmation.
 
 ----------------------------------------------------
-  10/10 TESTS PASSED — ALL 11 CRYPTOGRAPHIC GUARANTEES VERIFIED!
+  12/12 TESTS PASSED — ALL 11 CRYPTOGRAPHIC GUARANTEES VERIFIED!
 ====================================================
 ```
 
@@ -236,7 +240,7 @@ npm install
 # Compile Compact smart contract & generate ZKIR circuits
 npm run compile
 
-# Run the 10/10 Zero-Knowledge test suite with nullifier Set assertions
+# Run the 12/12 Zero-Knowledge test suite with nullifier Set assertions
 npm test
 
 # Start local development server

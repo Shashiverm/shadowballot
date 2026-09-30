@@ -145,14 +145,13 @@ export const ContractInspector: React.FC = () => {
       if (res.ok) {
         setIndexerStatus({ checking: false, online: true, latencyMs: latency });
       } else {
-        setIndexerStatus({ checking: false, online: true, latencyMs: latency });
+        setIndexerStatus({ checking: false, online: false, latencyMs: latency });
       }
     } catch {
-      // Indexer might restrict CORS from localhost; mark ready for RPC
       setIndexerStatus({
         checking: false,
-        online: true,
-        latencyMs: 185
+        online: false,
+        latencyMs: 0
       });
     }
   };
@@ -451,8 +450,8 @@ export circuit cast_private_vote(disclosedNullifier: Bytes<32>, optionChoice: Ui
               <div style={{ color: '#ffffff', fontFamily: 'var(--font-mono)', fontSize: '0.74rem', marginTop: '3px', wordBreak: 'break-all' }}>
                 {netConfig.indexerUrl}
               </div>
-              <div style={{ color: '#34d399', fontSize: '0.72rem', marginTop: '4px' }}>
-                Status: {indexerStatus.online ? `Responsive (${indexerStatus.latencyMs}ms latency)` : 'Connecting...'}
+              <div style={{ color: indexerStatus.online ? '#34d399' : '#ef4444', fontSize: '0.72rem', marginTop: '4px' }}>
+                Status: {indexerStatus.checking ? 'Connecting...' : indexerStatus.online ? `Responsive (${indexerStatus.latencyMs}ms latency)` : 'Offline / Unreachable'}
               </div>
             </div>
 
